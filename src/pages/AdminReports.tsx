@@ -12,7 +12,7 @@ import {
   onSnapshot,
   updateDoc
 } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
 import { DailyReport, Order, Expense, CashRegisterSession } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
 import { 
@@ -67,7 +67,7 @@ export default function AdminReports() {
       setLoading(false);
     }, (error) => {
       console.error('AdminReports: Error fetching reports:', error);
-      toast.error('Permission denied or error fetching reports. Check console.');
+      handleFirestoreError(error, OperationType.LIST, 'dailyReports');
       setLoading(false);
     });
     return () => unsubscribe();
@@ -82,6 +82,7 @@ export default function AdminReports() {
       setSessions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CashRegisterSession)));
     }, (error) => {
       console.error('AdminReports: Error fetching sessions:', error);
+      handleFirestoreError(error, OperationType.LIST, 'cashRegisterSessions');
     });
     return () => unsubscribe();
   }, [refreshKey]);
@@ -128,6 +129,9 @@ export default function AdminReports() {
         sessions: prev?.sessions || [] 
       }));
       setDetailsLoading(false);
+    }, (error) => {
+      console.error('AdminReports: Error fetching orders details:', error);
+      handleFirestoreError(error, OperationType.LIST, 'orders');
     });
 
     const unsubExpenses = onSnapshot(expensesQ, (snap) => {
@@ -137,6 +141,9 @@ export default function AdminReports() {
         expenses, 
         sessions: prev?.sessions || [] 
       }));
+    }, (error) => {
+      console.error('AdminReports: Error fetching expenses details:', error);
+      handleFirestoreError(error, OperationType.LIST, 'expenses');
     });
 
     const unsubSessions = onSnapshot(sessionsQ, (snap) => {
@@ -146,6 +153,9 @@ export default function AdminReports() {
         expenses: prev?.expenses || [], 
         sessions 
       }));
+    }, (error) => {
+      console.error('AdminReports: Error fetching sessions details:', error);
+      handleFirestoreError(error, OperationType.LIST, 'cashRegisterSessions');
     });
 
     return () => {
@@ -549,12 +559,14 @@ export default function AdminReports() {
                             id: session.id,
                             date: new Date(session.startTime?.toDate?.() || session.startTime).toISOString().split('T')[0],
                             totalOrders: 0,
-                            walkinSales: session.walkinSales || 0,
+                            walkinSales: session.cashSales || 0,
                             onlineSales: session.onlineSales || 0,
-                            cashSales: session.cashSales || 0,
                             totalExpenses: session.expenses || 0,
                             sessions: 1,
-                            difference: session.difference || 0
+                            difference: session.difference || 0,
+                            cashExpected: session.expectedCash || 0,
+                            cashCounted: session.actualCash || 0,
+                            generatedAt: new Date().toISOString()
                           };
                           // We need orders and expenses for this session specifically
                           // For now, just print the summary

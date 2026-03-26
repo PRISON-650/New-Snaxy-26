@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
-            const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com';
+            const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com' || firebaseUser.email === 'gotify.pk@gmail.com';
             
             if (isAdminEmail && userData.role !== 'admin') {
               const updatedUser = { ...userData, role: 'admin' as UserRole };
@@ -52,23 +52,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setUser(userData);
             }
           } else {
+            console.log('Auth sync: User document not found, checking for pre-authorized record...');
             // Check for pre-authorized user by email
-            const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email?.toLowerCase()));
-            const querySnap = await getDocs(q);
-            
             let initialRole: UserRole = 'customer';
             let initialDisplayName = firebaseUser.displayName || '';
 
-            if (!querySnap.empty) {
-              const pendingDoc = querySnap.docs[0];
-              const pendingData = pendingDoc.data();
-              initialRole = pendingData.role || 'customer';
-              initialDisplayName = pendingData.displayName || initialDisplayName;
+            try {
+              const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email?.toLowerCase()));
+              const querySnap = await getDocs(q);
               
-              // Delete the pending document
-              await deleteDoc(pendingDoc.ref);
-            } else {
-              const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com';
+              if (!querySnap.empty) {
+                const pendingDoc = querySnap.docs[0];
+                const pendingData = pendingDoc.data();
+                initialRole = pendingData.role || 'customer';
+                initialDisplayName = pendingData.displayName || initialDisplayName;
+                
+                console.log('Auth sync: Found pre-authorized record with role:', initialRole);
+                // Delete the pending document
+                await deleteDoc(pendingDoc.ref);
+              } else {
+                const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com' || firebaseUser.email === 'gotify.pk@gmail.com';
+                if (isAdminEmail) initialRole = 'admin';
+              }
+            } catch (queryError) {
+              console.warn('Auth sync: Could not query for pre-authorized user (likely permission denied). Defaulting to customer role.');
+              const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com' || firebaseUser.email === 'gotify.pk@gmail.com';
               if (isAdminEmail) initialRole = 'admin';
             }
 
@@ -80,18 +88,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               role: initialRole,
               createdAt: new Date().toISOString(),
             };
+            
+            console.log('Auth sync: Creating new user document in Firestore...');
             await setDoc(userRef, newUser);
             setUser(newUser);
           }
         } catch (error: any) {
-          console.error('Auth state error:', error);
-          // Don't toast for "missing permissions" on the very first check as it might be race condition
-          // but do log it clearly.
+          console.error('Auth sync error:', error);
+          // If we fail here, at least try to set a minimal user state if we have a firebaseUser
+          // so the app doesn't just hang or show "not logged in"
+          if (firebaseUser) {
+            const fallbackUser: User = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email!,
+              displayName: firebaseUser.displayName || '',
+              photoURL: firebaseUser.photoURL || '',
+              role: 'customer',
+              createdAt: new Date().toISOString(),
+            };
+            setUser(fallbackUser);
+          }
+          
           if (error.message?.includes('permission-denied')) {
             console.warn('Permission denied during auth sync - this is expected if rules are still propagating or user is new');
           } else {
-            toast.error('Error syncing user data. Please refresh.');
+            toast.error('Error syncing user data. You might have limited access.');
           }
+        } finally {
           setLoading(false);
         }
       } else {
