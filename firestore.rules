@@ -47,7 +47,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && request.auth.token.email == "gotify.pk@gmail.com" && request.auth.token.email_verified == true;
+      return isAuthenticated() && request.auth.token.email == "mdanyalkayani77@gmail.com" && request.auth.token.email_verified == true;
     }
 
     function isValidUser(data) {
