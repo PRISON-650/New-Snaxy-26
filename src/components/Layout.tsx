@@ -28,7 +28,7 @@ export default function Layout({ children, admin = false }: LayoutProps) {
     { name: 'Orders', path: '/admin/orders', icon: ClipboardList },
     { name: 'Reports', path: '/admin/reports', icon: FileText },
     { name: 'POS (Cashier)', path: '/cashier', icon: ShoppingBag },
-    ...(isSuperAdmin ? [{ name: 'Users', path: '/admin/users', icon: UserIcon }] : []),
+    ...(isAdmin ? [{ name: 'Users', path: '/admin/users', icon: UserIcon }] : []),
   ] : [
     { name: 'Home', path: '/' },
     { name: 'Menu', path: '/menu' },

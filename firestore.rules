@@ -75,7 +75,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId) || isStaff() || (isAuthenticated() && resource.data.email == request.auth.token.email) || resource.data.isPending == true;
       allow list: if isStaff() || (isAuthenticated() && resource.data.email == request.auth.token.email);
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isSuperAdmin());
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
       allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && 
                     (isSuperAdmin() || request.resource.data.role == resource.data.role);
       allow delete: if isSuperAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email);

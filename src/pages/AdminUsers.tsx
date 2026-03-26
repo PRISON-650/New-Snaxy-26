@@ -10,16 +10,23 @@ import { useAuth } from '../AuthContext';
 import { Navigate } from 'react-router-dom';
 
 export default function AdminUsers() {
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isAdmin, resetPassword } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<UserRole | 'all'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [newUser, setNewUser] = useState({
     email: '',
+    displayName: '',
+    role: 'customer' as UserRole,
+    password: ''
+  });
+  const [editUser, setEditUser] = useState({
     displayName: '',
     role: 'customer' as UserRole,
     password: ''
@@ -102,6 +109,40 @@ export default function AdminUsers() {
     }
   };
 
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+
+    setIsSubmitting(true);
+    try {
+      const updates: any = {
+        displayName: editUser.displayName,
+        role: editUser.role,
+      };
+
+      // If password is provided, it means we are resetting it
+      if (editUser.password) {
+        updates.password = editUser.password;
+        updates.isPending = true;
+      }
+
+      await updateDoc(doc(db, 'users', selectedUser.uid), updates);
+      toast.success('User updated successfully');
+      setIsEditModalOpen(false);
+      fetchUsers();
+    } catch (error) {
+      console.error('Update user error:', error);
+      toast.error('Failed to update user');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResetPassword = async (user: User) => {
+    if (!confirm(`Send password reset email to ${user.email}?`)) return;
+    await resetPassword(user.email);
+  };
+
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          user.displayName?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -109,7 +150,7 @@ export default function AdminUsers() {
     return matchesSearch && matchesTab;
   });
 
-  if (!isSuperAdmin) {
+  if (!isAdmin) {
     return <Navigate to="/admin" replace />;
   }
 
@@ -328,47 +369,129 @@ export default function AdminUsers() {
                 </div>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-neutral-50 relative z-10 space-y-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => updateUserRole(user, 'admin')}
-                    className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-xs",
-                      user.role === 'admin' 
-                        ? "bg-orange-600 text-white shadow-lg shadow-orange-200" 
-                        : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                    )}
-                  >
-                    Admin
-                  </button>
-                  <button
-                    onClick={() => updateUserRole(user, 'cashier')}
-                    className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-xs",
-                      user.role === 'cashier' 
-                        ? "bg-blue-600 text-white shadow-lg shadow-blue-200" 
-                        : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                    )}
-                  >
-                    Cashier
-                  </button>
-                  <button
-                    onClick={() => updateUserRole(user, 'customer')}
-                    className={cn(
-                      "flex-1 py-3 rounded-xl font-bold transition-all text-xs",
-                      user.role === 'customer' 
-                        ? "bg-neutral-900 text-white shadow-lg shadow-neutral-200" 
-                        : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-                    )}
-                  >
-                    User
-                  </button>
-                </div>
+              <div className="mt-8 pt-6 border-t border-neutral-50 relative z-10 flex gap-2">
+                <button
+                  onClick={() => {
+                    setSelectedUser(user);
+                    setEditUser({
+                      displayName: user.displayName || '',
+                      role: user.role,
+                      password: ''
+                    });
+                    setIsEditModalOpen(true);
+                  }}
+                  className="flex-1 py-3 bg-neutral-100 text-neutral-600 rounded-xl font-bold hover:bg-neutral-200 transition-all text-xs uppercase tracking-widest"
+                >
+                  Edit User
+                </button>
+                <button
+                  onClick={() => handleResetPassword(user)}
+                  className="p-3 bg-orange-50 text-orange-600 rounded-xl hover:bg-orange-100 transition-all"
+                  title="Send Reset Email"
+                >
+                  <Mail className="w-4 h-4" />
+                </button>
               </div>
             </motion.div>
           ))}
         </div>
       )}
+
+      {/* Edit User Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && selectedUser && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-neutral-100 max-w-md w-full space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-black tracking-tight">EDIT USER</h3>
+                <button onClick={() => setIsEditModalOpen(false)} className="p-2 hover:bg-neutral-100 rounded-full">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateUser} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Email Address</label>
+                  <input
+                    disabled
+                    type="email"
+                    value={selectedUser.email}
+                    className="w-full px-6 py-4 bg-neutral-100 border border-neutral-100 rounded-2xl text-neutral-500 cursor-not-allowed"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Display Name</label>
+                  <input
+                    type="text"
+                    value={editUser.displayName}
+                    onChange={(e) => setEditUser({ ...editUser, displayName: e.target.value })}
+                    className="w-full px-6 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-600/20"
+                    placeholder="John Doe"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Reset Password (Optional)</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={editUser.password}
+                      onChange={(e) => setEditUser({ ...editUser, password: e.target.value })}
+                      className="w-full px-6 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-600/20"
+                      placeholder="Leave blank to keep current"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-neutral-400 ml-2 mt-1 italic">
+                    Setting a password here will mark the user as "Pending" until they login with this new password.
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Role</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {['admin', 'cashier', 'customer'].map((role) => (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => setEditUser({ ...editUser, role: role as UserRole })}
+                        className={cn(
+                          "py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all",
+                          editUser.role === role 
+                            ? "bg-neutral-900 text-white" 
+                            : "bg-neutral-100 text-neutral-400 hover:bg-neutral-200"
+                        )}
+                      >
+                        {role}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  disabled={isSubmitting}
+                  type="submit"
+                  className="w-full py-4 bg-orange-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-orange-700 transition-all shadow-lg shadow-orange-200 disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Updating...' : 'Save Changes'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

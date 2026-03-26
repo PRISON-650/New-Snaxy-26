@@ -99,7 +99,7 @@ export default function App() {
                     </ProtectedRoute>
                   } />
                   <Route path="/admin/users" element={
-                    <ProtectedRoute superAdminOnly>
+                    <ProtectedRoute adminOnly>
                       <Layout admin><AdminUsers /></Layout>
                     </ProtectedRoute>
                   } />

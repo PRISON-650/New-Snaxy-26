@@ -19,6 +19,7 @@ interface AuthContextType {
   loading: boolean;
   login: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   isAdmin: boolean;
   isSuperAdmin: boolean;
@@ -163,6 +164,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return;
               } catch (regError: any) {
                 console.error('Auto-registration error:', regError);
+                if (regError.code === 'auth/email-already-in-use') {
+                  // This happens if the user was "reset" by an admin
+                  // We can't easily update the password here without the old one
+                  // So we should tell them to use the password reset email
+                  throw new Error('This account is already active. If you forgot your password, please use the "Forgot Password" link.');
+                }
                 throw new Error('Invalid email or password');
               }
             }
@@ -173,6 +180,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error: any) {
       console.error('Email login error:', error);
       toast.error(error.message || 'Failed to log in.');
+    }
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      const { sendPasswordResetEmail } = await import('firebase/auth');
+      await sendPasswordResetEmail(auth, email);
+      toast.success('Password reset email sent!');
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      toast.error(error.message || 'Failed to send reset email.');
     }
   };
 
@@ -206,7 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, isAdmin, isSuperAdmin]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithEmail, logout, isAdmin, isSuperAdmin, isCashier, isStaff }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithEmail, resetPassword, logout, isAdmin, isSuperAdmin, isCashier, isStaff }}>
       {children}
     </AuthContext.Provider>
   );

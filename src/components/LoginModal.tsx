@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Mail, Lock, LogIn, Chrome } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { cn } from '../lib/utils';
+import { toast } from 'sonner';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -10,7 +11,7 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const { user, login, loginWithEmail } = useAuth();
+  const { user, login, loginWithEmail, resetPassword } = useAuth();
   const [isEmailLogin, setIsEmailLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -103,7 +104,22 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Password</label>
+                      <div className="flex justify-between items-center ml-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Password</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!email) {
+                              toast.error('Please enter your email first');
+                              return;
+                            }
+                            resetPassword(email);
+                          }}
+                          className="text-[10px] font-black uppercase tracking-widest text-orange-600 hover:underline"
+                        >
+                          Forgot?
+                        </button>
+                      </div>
                       <div className="relative">
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
                         <input
