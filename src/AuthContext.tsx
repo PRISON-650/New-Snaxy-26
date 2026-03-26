@@ -190,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               } catch (regError: any) {
                 console.error('Auto-registration error:', regError);
                 if (regError.code === 'auth/email-already-in-use') {
-                  throw new Error('This account is already active but the password entered is incorrect. Please use the "Forgot Password" link to reset it.');
+                  throw new Error('This email is already registered in our system, but the password you entered is incorrect. Please try your usual password or reset it.');
                 }
                 throw new Error('Invalid email or password');
               }
@@ -243,7 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isSuperAdmin = user?.email === 'mdanyalkayani77@gmail.com';
+  const isSuperAdmin = user?.email === 'mdanyalkayani77@gmail.com' || user?.email === 'gotify.pk@gmail.com';
   const isAdmin = user?.role === 'admin' || isSuperAdmin;
   const isCashier = user?.role === 'cashier';
   const isStaff = isAdmin || isCashier;

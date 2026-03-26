@@ -50,30 +50,41 @@ export default function AdminReports() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<DailyReport>>({});
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleRefresh = () => {
+    setRefreshKey(prev => prev + 1);
+    toast.success('Refreshing data...');
+  };
 
   // Real-time Daily Reports
   useEffect(() => {
+    console.log('AdminReports: Initializing dailyReports listener');
     const q = query(collection(db, 'dailyReports'), orderBy('date', 'desc'), limit(60));
     const unsubscribe = onSnapshot(q, (snap) => {
+      console.log('AdminReports: Received dailyReports update, count:', snap.size);
       setReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyReport)));
       setLoading(false);
     }, (error) => {
-      console.error('Error fetching reports:', error);
+      console.error('AdminReports: Error fetching reports:', error);
+      toast.error('Permission denied or error fetching reports. Check console.');
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [refreshKey]);
 
   // Real-time All Sessions (for the "Sessions" tab)
   useEffect(() => {
+    console.log('AdminReports: Initializing sessions listener');
     const q = query(collection(db, 'cashRegisterSessions'), orderBy('startTime', 'desc'), limit(100));
     const unsubscribe = onSnapshot(q, (snap) => {
+      console.log('AdminReports: Received sessions update, count:', snap.size);
       setSessions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CashRegisterSession)));
     }, (error) => {
-      console.error('Error fetching sessions:', error);
+      console.error('AdminReports: Error fetching sessions:', error);
     });
     return () => unsubscribe();
-  }, []);
+  }, [refreshKey]);
 
   // Real-time Details for Selected Report
   useEffect(() => {
@@ -362,31 +373,45 @@ export default function AdminReports() {
                 <p className="text-neutral-500">View and manage historical daily reports and session details.</p>
               </div>
               
-              <div className="flex bg-white p-1 rounded-2xl border border-neutral-100 shadow-sm">
+              <div className="flex gap-4 items-center">
                 <button 
-                  onClick={() => setActiveTab('daily')}
-                  className={cn(
-                    "px-6 py-2 rounded-xl text-sm font-bold transition-all",
-                    activeTab === 'daily' ? "bg-orange-600 text-white shadow-lg shadow-orange-200" : "text-neutral-400 hover:text-neutral-600"
-                  )}
+                  onClick={handleRefresh}
+                  className="p-2 bg-white border border-neutral-100 rounded-xl text-neutral-400 hover:text-orange-600 transition-colors shadow-sm"
+                  title="Refresh Data"
                 >
-                  Daily Reports
+                  <TrendingUp className="w-5 h-5" />
                 </button>
-                <button 
-                  onClick={() => setActiveTab('sessions')}
-                  className={cn(
-                    "px-6 py-2 rounded-xl text-sm font-bold transition-all",
-                    activeTab === 'sessions' ? "bg-orange-600 text-white shadow-lg shadow-orange-200" : "text-neutral-400 hover:text-neutral-600"
-                  )}
-                >
-                  Session Blocks
-                </button>
+                <div className="flex bg-white p-1 rounded-2xl border border-neutral-100 shadow-sm">
+                  <button 
+                    onClick={() => setActiveTab('daily')}
+                    className={cn(
+                      "px-6 py-2 rounded-xl text-sm font-bold transition-all",
+                      activeTab === 'daily' ? "bg-orange-600 text-white shadow-lg shadow-orange-200" : "text-neutral-400 hover:text-neutral-600"
+                    )}
+                  >
+                    Daily Reports
+                  </button>
+                  <button 
+                    onClick={() => setActiveTab('sessions')}
+                    className={cn(
+                      "px-6 py-2 rounded-xl text-sm font-bold transition-all",
+                      activeTab === 'sessions' ? "bg-orange-600 text-white shadow-lg shadow-orange-200" : "text-neutral-400 hover:text-neutral-600"
+                    )}
+                  >
+                    Session Blocks
+                  </button>
+                </div>
               </div>
             </div>
 
             {activeTab === 'daily' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {reports.map((report) => (
+                {reports.length === 0 ? (
+                  <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border border-dashed border-neutral-200">
+                    <Calendar className="w-12 h-12 text-neutral-200 mx-auto mb-4" />
+                    <p className="text-neutral-400 font-bold">No daily reports found yet.</p>
+                  </div>
+                ) : reports.map((report) => (
                   <button
                     key={report.id}
                     onClick={() => setSelectedReport(report)}
@@ -444,7 +469,12 @@ export default function AdminReports() {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {sessions.map((session) => (
+                {sessions.length === 0 ? (
+                  <div className="col-span-full py-20 text-center bg-white rounded-[3rem] border border-dashed border-neutral-200">
+                    <Clock className="w-12 h-12 text-neutral-200 mx-auto mb-4" />
+                    <p className="text-neutral-400 font-bold">No session history found yet.</p>
+                  </div>
+                ) : sessions.map((session) => (
                   <div 
                     key={session.id}
                     className={cn(
@@ -510,6 +540,66 @@ export default function AdminReports() {
                           {formatCurrency(session.difference || 0)}
                         </span>
                       </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Create a dummy report object to use the existing print function
+                          const dummyReport: DailyReport = {
+                            id: session.id,
+                            date: new Date(session.startTime?.toDate?.() || session.startTime).toISOString().split('T')[0],
+                            totalOrders: 0,
+                            walkinSales: session.walkinSales || 0,
+                            onlineSales: session.onlineSales || 0,
+                            cashSales: session.cashSales || 0,
+                            totalExpenses: session.expenses || 0,
+                            sessions: 1,
+                            difference: session.difference || 0
+                          };
+                          // We need orders and expenses for this session specifically
+                          // For now, just print the summary
+                          const printWindow = window.open('', '_blank');
+                          if (printWindow) {
+                            printWindow.document.write(`
+                              <html>
+                                <head>
+                                  <title>Session Report - ${session.cashierName}</title>
+                                  <style>
+                                    body { font-family: sans-serif; padding: 20px; }
+                                    .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; }
+                                    .stat { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #eee; }
+                                    .total { font-weight: bold; font-size: 1.2em; margin-top: 10px; }
+                                  </style>
+                                </head>
+                                <body>
+                                  <div class="header">
+                                    <h1>SESSION REPORT</h1>
+                                    <p>Cashier: ${session.cashierName}</p>
+                                    <p>Date: ${new Date(session.startTime?.toDate?.() || session.startTime).toLocaleDateString()}</p>
+                                  </div>
+                                  <div class="stat"><span>Start Time:</span> <span>${new Date(session.startTime?.toDate?.() || session.startTime).toLocaleTimeString()}</span></div>
+                                  <div class="stat"><span>End Time:</span> <span>${session.endTime ? new Date(session.endTime?.toDate?.() || session.endTime).toLocaleTimeString() : 'ACTIVE'}</span></div>
+                                  <div class="stat"><span>Cash Sales:</span> <span>${formatCurrency(session.cashSales)}</span></div>
+                                  <div class="stat"><span>Online Sales:</span> <span>${formatCurrency(session.onlineSales)}</span></div>
+                                  <div class="stat"><span>Expenses:</span> <span>${formatCurrency(session.expenses)}</span></div>
+                                  <div class="stat total"><span>Expected Cash:</span> <span>${formatCurrency(session.expectedCash)}</span></div>
+                                  <div class="stat total"><span>Actual Cash:</span> <span>${formatCurrency(session.actualCash)}</span></div>
+                                  <div class="stat total"><span>Difference:</span> <span style="color: ${(session.difference || 0) >= 0 ? 'green' : 'red'}">${formatCurrency(session.difference || 0)}</span></div>
+                                  <div style="margin-top: 50px; text-align: center; font-size: 0.8em; color: #888;">
+                                    Printed on ${new Date().toLocaleString()}
+                                  </div>
+                                  <script>window.print();</script>
+                                </body>
+                              </html>
+                            `);
+                            printWindow.document.close();
+                          }
+                        }}
+                        className="w-full py-3 bg-neutral-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-2"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Print Session Block
+                      </button>
                     </div>
                   </div>
                 ))}

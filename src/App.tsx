@@ -117,7 +117,7 @@ export default function App() {
                 <Toaster 
                   position="top-right" 
                   toastOptions={{
-                    duration: 100,
+                    duration: 3000,
                     style: { marginTop: '80px' }
                   }}
                 />

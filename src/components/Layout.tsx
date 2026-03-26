@@ -106,6 +106,12 @@ export default function Layout({ children, admin = false }: LayoutProps) {
                         <div className="p-4 border-b border-neutral-100">
                           <p className="text-sm font-bold text-neutral-900 truncate">{user.displayName || 'User'}</p>
                           <p className="text-xs text-neutral-500 truncate">{user.email}</p>
+                          {isAdmin && (
+                            <div className="mt-2 px-2 py-1 bg-neutral-100 rounded-lg">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Role: {user.role}</p>
+                              {isSuperAdmin && <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">Super Admin</p>}
+                            </div>
+                          )}
                         </div>
                         
                         <div className="p-2">
