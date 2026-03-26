@@ -33,6 +33,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authInProgress, setAuthInProgress] = useState(false);
 
   useEffect(() => {
     console.log('AuthContext: Initializing onAuthStateChanged listener');
@@ -50,8 +51,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userData = userSnap.data() as User;
             
             if (isAdminEmail && userData.role !== 'admin') {
+              console.log('AuthContext: Forcing admin role for super admin email');
               const updatedUser = { ...userData, role: 'admin' as UserRole };
-              await updateDoc(userRef, { role: 'admin' });
+              try {
+                await updateDoc(userRef, { role: 'admin' });
+              } catch (e) {
+                console.warn('AuthContext: Failed to update admin role in Firestore, but proceeding with local admin state');
+              }
               setUser(updatedUser);
             } else {
               setUser(userData);
@@ -74,12 +80,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 
                 console.log('Auth sync: Found pre-authorized record with role:', initialRole);
                 // Delete the pending document
-                await deleteDoc(pendingDoc.ref);
+                try {
+                  await deleteDoc(pendingDoc.ref);
+                } catch (e) {
+                  console.warn('Auth sync: Failed to delete pending doc, but proceeding');
+                }
               }
             } catch (queryError: any) {
               console.warn('Auth sync: Could not query for pre-authorized user (likely permission denied).');
               if (queryError.code === 'permission-denied') {
-                handleFirestoreError(queryError, OperationType.LIST, 'users');
+                try {
+                  handleFirestoreError(queryError, OperationType.LIST, 'users');
+                } catch (e) {}
               }
             }
 
@@ -93,14 +105,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
             
             console.log('Auth sync: Creating new user document in Firestore...');
-            await setDoc(userRef, newUser);
+            try {
+              await setDoc(userRef, newUser);
+            } catch (e) {
+              console.warn('Auth sync: Failed to create user document in Firestore, using fallback state');
+            }
             setUser(newUser);
           }
         } catch (error: any) {
           console.error('Auth sync error:', error);
           
           if (error.code === 'permission-denied') {
-            handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+            try {
+              handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+            } catch (e) {}
           }
           
           // Fallback to basic user info from Auth if Firestore fails
@@ -112,54 +130,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: isAdminEmail ? 'admin' : 'customer',
             createdAt: new Date().toISOString(),
           };
+          console.log('AuthContext: Setting fallback user state:', fallbackUser.email);
           setUser(fallbackUser);
           
           if (!error.message?.includes('permission-denied')) {
             toast.error('Error syncing user data. You might have limited access.');
           }
         } finally {
+          console.log('AuthContext: Sync complete, setting loading to false');
           setLoading(false);
         }
       } else {
+        console.log('AuthContext: No Firebase user, checking local storage');
         // Check local storage for staff session
         const staffSession = localStorage.getItem('staff_session');
         if (staffSession) {
+          console.log('AuthContext: Found staff session in local storage');
           setUser(JSON.parse(staffSession));
         } else {
           setUser(null);
         }
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
   const login = async () => {
+    if (authInProgress) return;
+    setAuthInProgress(true);
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       toast.success('Successfully logged in!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
-      toast.error('Failed to log in. Please try again.');
+      if (error.code === 'auth/popup-blocked') {
+        toast.error('Sign-in popup was blocked by your browser. Please allow popups for this site.');
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        console.warn('AuthContext: Popup request cancelled or closed by user');
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        console.log('AuthContext: Popup closed by user');
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        toast.error('An account already exists with this email but with a different sign-in method. Please sign in with email/password.');
+      } else {
+        toast.error('Failed to log in. Please try again.');
+      }
+    } finally {
+      setAuthInProgress(false);
     }
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
-    console.log('Attempting email login for:', email);
+    if (authInProgress) return;
+    setAuthInProgress(true);
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('AuthContext: Attempting email login for:', normalizedEmail);
     try {
       // First try Firebase Auth (if user already registered)
       try {
-        await signInWithEmailAndPassword(auth, email, pass);
-        console.log('Firebase Auth login successful');
+        console.log('AuthContext: Trying Firebase Auth signInWithEmailAndPassword');
+        await signInWithEmailAndPassword(auth, normalizedEmail, pass);
+        console.log('AuthContext: Firebase Auth login successful');
         toast.success('Successfully logged in!');
         return;
       } catch (e: any) {
-        console.warn('Firebase Auth login failed:', e.code, e.message);
+        console.warn('AuthContext: Firebase Auth login failed:', e.code, e.message);
         // If user not found in Auth, check Firestore for staff password
-        if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-          console.log('Checking Firestore for fallback authentication...');
+        if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
+          console.log('AuthContext: Checking Firestore for fallback authentication...');
           
           // Try both doc ID lookup and field query for robustness
           let staffData: any = null;
@@ -167,34 +207,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           // 1. Try doc ID lookup (old system used email as ID)
           try {
-            const staffDocRef = doc(db, 'users', email.toLowerCase());
+            const staffDocRef = doc(db, 'users', normalizedEmail);
+            console.log('AuthContext: Checking Firestore doc by ID:', normalizedEmail);
             staffSnap = await getDoc(staffDocRef);
             
             if (staffSnap.exists()) {
               staffData = staffSnap.data();
+              console.log('AuthContext: Found user doc by ID');
             } else {
               // 2. Try field query (new system uses UID as ID)
-              const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase()));
+              console.log('AuthContext: User doc not found by ID, trying email query');
+              const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
               const querySnap = await getDocs(q);
               if (!querySnap.empty) {
                 staffSnap = querySnap.docs[0];
                 staffData = staffSnap.data();
+                console.log('AuthContext: Found user doc by email query');
               }
             }
           } catch (staffError: any) {
-            console.warn('Fallback auth check failed (likely permission denied):', staffError.message);
-            // If we can't read the doc, we can't do the fallback. This is normal for non-pending users.
+            console.warn('AuthContext: Fallback auth check failed (likely permission denied):', staffError.message);
           }
           
           if (staffData) {
-            console.log('Found user in Firestore. Checking password...');
-            if (staffData.password === pass) {
-              console.log('Password matches Firestore. Attempting auto-registration...');
+            console.log('AuthContext: Found user in Firestore. Checking password match...');
+            if (staffData.password && staffData.password === pass) {
+              console.log('AuthContext: Password matches Firestore. Attempting auto-registration...');
               // Auto-register in Firebase Auth
               try {
-                const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+                const userCred = await createUserWithEmailAndPassword(auth, normalizedEmail, pass);
                 const firebaseUser = userCred.user;
-                console.log('Auto-registration successful. UID:', firebaseUser.uid);
+                console.log('AuthContext: Auto-registration successful. UID:', firebaseUser.uid);
                 
                 // Update profile
                 await updateProfile(firebaseUser, { displayName: staffData.displayName });
@@ -202,79 +245,99 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 // Move data to the real UID if it's currently indexed by email
                 const newUser: User = {
                   uid: firebaseUser.uid,
-                  email: email.toLowerCase(),
+                  email: normalizedEmail,
                   displayName: staffData.displayName,
                   photoURL: '',
                   role: staffData.role,
                   createdAt: staffData.createdAt || new Date().toISOString(),
                 };
                 
+                console.log('AuthContext: Saving new user doc with UID:', firebaseUser.uid);
                 await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
                 
                 // Delete the old "pending" staff document if it was indexed by email
-                if (staffSnap.id === email.toLowerCase()) {
+                if (staffSnap.id === normalizedEmail) {
+                  console.log('AuthContext: Deleting old email-indexed doc');
                   await deleteDoc(staffSnap.ref);
                 }
                 
                 toast.success('Account activated and logged in!');
                 return;
               } catch (regError: any) {
-                console.error('Auto-registration error:', regError);
+                console.error('AuthContext: Auto-registration error:', regError);
                 if (regError.code === 'auth/email-already-in-use') {
-                  throw new Error('This email is already registered in our system, but the password you entered is incorrect. Please try your usual password or reset it.');
+                  throw new Error('This email is already registered. If you forgot your password, please use the "Forgot?" link.');
                 }
-                throw new Error('Invalid email or password');
+                throw new Error('Failed to activate account. Please try again.');
               }
             } else {
-              console.warn('Password mismatch in Firestore');
+              console.warn('AuthContext: Password mismatch or no password in Firestore');
             }
           } else {
-            console.warn('User not found in Firestore either');
+            console.warn('AuthContext: User not found in Firestore either');
           }
         }
         
+        // If we reach here, both Firebase Auth and Firestore fallback failed
         // Map common Firebase errors to user-friendly messages
         let errorMessage = 'Failed to log in.';
         if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
-          errorMessage = 'Invalid email or password. Please try again.';
+          errorMessage = 'Invalid email or password. If you have an account, please use the "Forgot?" link above to reset your password. Otherwise, please Sign Up.';
         } else if (e.code === 'auth/too-many-requests') {
           errorMessage = 'Too many failed login attempts. Please try again later or reset your password.';
         } else if (e.code === 'auth/operation-not-allowed') {
           errorMessage = 'Email/Password login is not enabled. Please contact the administrator.';
+        } else if (e.code === 'auth/invalid-email') {
+          errorMessage = 'The email address is badly formatted.';
         }
         
         throw new Error(errorMessage);
       }
     } catch (error: any) {
-      console.error('Email login error:', error);
+      console.error('AuthContext: Email login error:', error);
       toast.error(error.message || 'Failed to log in.');
+    } finally {
+      setAuthInProgress(false);
     }
   };
 
   const signUp = async (email: string, pass: string, displayName: string) => {
+    if (authInProgress) return;
+    setAuthInProgress(true);
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log('AuthContext: Attempting sign up for:', normalizedEmail);
     try {
-      const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+      const userCred = await createUserWithEmailAndPassword(auth, normalizedEmail, pass);
       const firebaseUser = userCred.user;
+      console.log('AuthContext: Firebase Auth user created:', firebaseUser.uid);
       
       await updateProfile(firebaseUser, { displayName });
+      console.log('AuthContext: Profile updated with displayName:', displayName);
       
       const newUser: User = {
         uid: firebaseUser.uid,
-        email: email.toLowerCase(),
+        email: normalizedEmail,
         displayName,
         photoURL: '',
         role: 'customer',
         createdAt: new Date().toISOString(),
       };
       
-      await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+      console.log('AuthContext: Attempting to create Firestore user doc');
+      try {
+        await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+        console.log('AuthContext: Firestore user doc created');
+      } catch (e) {
+        console.warn('AuthContext: Failed to create Firestore user doc during signup, onAuthStateChanged will retry');
+      }
+      
       setUser(newUser);
       toast.success('Account created successfully!');
     } catch (error: any) {
-      console.error('Sign up error:', error);
+      console.error('AuthContext: Sign up error:', error);
       let errorMessage = 'Failed to create account.';
       if (error.code === 'auth/email-already-in-use') {
-        errorMessage = 'This email is already in use. Please sign in instead.';
+        errorMessage = 'This email is already registered. Please try signing in or use the "Forgot?" link to reset your password.';
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'Password is too weak. Please use at least 6 characters.';
       } else if (error.code === 'auth/invalid-email') {
@@ -282,6 +345,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       toast.error(errorMessage);
       throw new Error(errorMessage);
+    } finally {
+      setAuthInProgress(false);
     }
   };
 

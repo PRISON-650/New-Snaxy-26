@@ -14,7 +14,7 @@ interface LayoutProps {
 }
 
 export default function Layout({ children, admin = false }: LayoutProps) {
-  const { user, logout, isAdmin, isSuperAdmin, isCashier, isStaff } = useAuth();
+  const { user, loading, logout, isAdmin, isSuperAdmin, isCashier, isStaff } = useAuth();
   const { itemCount } = useCart();
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -37,6 +37,21 @@ export default function Layout({ children, admin = false }: LayoutProps) {
   // If cashier, they should only see the POS
   if (isCashier && location.pathname !== '/cashier') {
     return <Navigate to="/cashier" replace />;
+  }
+
+  if (loading && !user) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+            className="w-12 h-12 border-4 border-orange-200 border-t-orange-600 rounded-full"
+          />
+          <p className="text-neutral-500 font-medium animate-pulse">Syncing your account...</p>
+        </div>
+      </div>
+    );
   }
 
   return (

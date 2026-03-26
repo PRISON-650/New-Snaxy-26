@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Mail, Lock, LogIn, Chrome, User as UserIcon } from 'lucide-react';
+import { X, Mail, Lock, LogIn, Chrome, User as UserIcon, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Automatically close modal when user is logged in
   useEffect(() => {
@@ -25,6 +26,15 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
       onClose();
     }
   }, [user, isOpen, onClose]);
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      await login();
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,10 +92,19 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
               <div className="space-y-4">
                 {mode === 'signin' && !isEmailLogin && (
                   <button
-                    onClick={login}
-                    className="w-full py-4 bg-white border-2 border-neutral-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-neutral-50 transition-all active:scale-95"
+                    disabled={isLoading}
+                    onClick={handleGoogleLogin}
+                    className="w-full py-4 bg-white border-2 border-neutral-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-neutral-50 transition-all active:scale-95 disabled:opacity-50"
                   >
-                    <Chrome className="w-5 h-5 text-blue-500" />
+                    {isLoading ? (
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                        className="w-5 h-5 border-2 border-neutral-200 border-t-blue-500 rounded-full"
+                      />
+                    ) : (
+                      <Chrome className="w-5 h-5 text-blue-500" />
+                    )}
                     Continue with Google
                   </button>
                 )}
@@ -168,12 +187,19 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
                         <input
                           required
-                          type="password"
+                          type={showPassword ? "text" : "password"}
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
-                          className="w-full pl-12 pr-4 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-bold"
+                          className="w-full pl-12 pr-12 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-bold"
                           placeholder="••••••••"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 transition-colors"
+                        >
+                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
                       </div>
                     </div>
 
