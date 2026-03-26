@@ -49,8 +49,12 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         }
         await signUp(email, password, displayName);
       }
-    } catch (error) {
-      // Error handled in AuthContext
+    } catch (error: any) {
+      // If email already in use, offer to switch to sign in
+      if (error.message && error.message.includes('already registered')) {
+        setMode('signin');
+        setIsEmailLogin(true);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -177,7 +181,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                               }
                               resetPassword(email);
                             }}
-                            className="text-[10px] font-black uppercase tracking-widest text-orange-600 hover:underline"
+                            className="text-xs font-black uppercase tracking-widest text-orange-600 hover:underline px-2 py-1 bg-orange-50 rounded-lg"
                           >
                             Forgot?
                           </button>
@@ -239,7 +243,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 )}
               </div>
 
-              <div className="pt-4 border-t border-neutral-100">
+              <div className="pt-4 border-t border-neutral-100 space-y-4">
                 <button
                   onClick={toggleMode}
                   className="w-full text-center text-sm font-bold text-neutral-600 hover:text-orange-600 transition-colors"
@@ -248,6 +252,12 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     ? "Don't have an account? Sign Up" 
                     : "Already have an account? Sign In"}
                 </button>
+                
+                {mode === 'signin' && (
+                  <p className="text-center text-[10px] text-neutral-400 uppercase tracking-widest font-black">
+                    Trouble signing in? <button onClick={() => setMode('signup')} className="text-orange-600 hover:underline">Create a new account</button>
+                  </p>
+                )}
               </div>
 
               <p className="text-center text-xs text-neutral-400 leading-relaxed">

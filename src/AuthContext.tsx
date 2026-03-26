@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           console.log('AuthContext: Attempting to fetch user document:', firebaseUser.uid);
           const userSnap = await getDoc(userRef);
+          console.log('AuthContext: Fetch result exists:', userSnap.exists());
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
@@ -87,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
               }
             } catch (queryError: any) {
-              console.warn('Auth sync: Could not query for pre-authorized user (likely permission denied).');
+              console.warn('Auth sync: Could not query for pre-authorized user (likely permission denied).', queryError.code, queryError.message);
               if (queryError.code === 'permission-denied') {
                 try {
                   handleFirestoreError(queryError, OperationType.LIST, 'users');
@@ -104,16 +105,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               createdAt: new Date().toISOString(),
             };
             
-            console.log('Auth sync: Creating new user document in Firestore...');
+            console.log('Auth sync: Creating new user document in Firestore...', newUser);
             try {
               await setDoc(userRef, newUser);
-            } catch (e) {
-              console.warn('Auth sync: Failed to create user document in Firestore, using fallback state');
+              console.log('Auth sync: Successfully created user document');
+            } catch (e: any) {
+              console.warn('Auth sync: Failed to create user document in Firestore, using fallback state', e.code, e.message);
             }
             setUser(newUser);
           }
         } catch (error: any) {
-          console.error('Auth sync error:', error);
+          console.error('Auth sync error (CRITICAL):', error.code, error.message, error);
           
           if (error.code === 'permission-denied') {
             try {
@@ -282,7 +284,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Map common Firebase errors to user-friendly messages
         let errorMessage = 'Failed to log in.';
         if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
-          errorMessage = 'Invalid email or password. If you have an account, please use the "Forgot?" link above to reset your password. Otherwise, please Sign Up.';
+          const isSuperAdminEmail = normalizedEmail === 'mdanyalkayani77@gmail.com' || normalizedEmail === 'gotify.pk@gmail.com';
+          if (isSuperAdminEmail) {
+            errorMessage = 'Super Admin account detected. Please use "Continue with Google" for first-time access or if you forgot your password.';
+          } else {
+            errorMessage = 'Invalid email or password. Please double-check your credentials. If you have an account but forgot your password, use the "Forgot?" link. If you are new, please Sign Up.';
+          }
         } else if (e.code === 'auth/too-many-requests') {
           errorMessage = 'Too many failed login attempts. Please try again later or reset your password.';
         } else if (e.code === 'auth/operation-not-allowed') {

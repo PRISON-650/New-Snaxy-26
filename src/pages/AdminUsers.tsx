@@ -20,6 +20,7 @@ export default function AdminUsers() {
   const [activeTab, setActiveTab] = useState<UserRole | 'all'>('all');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [newUser, setNewUser] = useState({
     email: '',
     displayName: '',
@@ -284,14 +285,23 @@ export default function AdminUsers() {
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Password</label>
-                  <input
-                    required
-                    type="password"
-                    value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                    className="w-full px-6 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-600/20"
-                    placeholder="••••••••"
-                  />
+                  <div className="relative">
+                    <input
+                      required
+                      type={showNewUserPassword ? "text" : "password"}
+                      value={newUser.password}
+                      onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                      className="w-full px-6 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-600/20"
+                      placeholder="••••••••"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                    >
+                      {showNewUserPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
