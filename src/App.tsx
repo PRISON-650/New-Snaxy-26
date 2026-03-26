@@ -20,6 +20,7 @@ import Dashboard from './pages/Dashboard';
 import AdminMenu from './pages/AdminMenu';
 import AdminOrders from './pages/AdminOrders';
 import AdminUsers from './pages/AdminUsers';
+import AdminReports from './pages/AdminReports';
 import Cashier from './pages/Cashier';
 
 function ProtectedRoute({ children, adminOnly = false, superAdminOnly = false, staffOnly = false }: { children: React.ReactNode, adminOnly?: boolean, superAdminOnly?: boolean, staffOnly?: boolean }) {
@@ -100,6 +101,11 @@ export default function App() {
                   <Route path="/admin/users" element={
                     <ProtectedRoute superAdminOnly>
                       <Layout admin><AdminUsers /></Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/admin/reports" element={
+                    <ProtectedRoute adminOnly>
+                      <Layout admin><AdminReports /></Layout>
                     </ProtectedRoute>
                   } />
                   <Route path="/cashier" element={

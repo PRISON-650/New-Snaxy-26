@@ -285,6 +285,7 @@ export default function Cashier() {
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
+  const [autoPrint, setAutoPrint] = useState(false);
 
   const [dailyReport, setDailyReport] = useState<DailyReport | null>(null);
   const [reportHistory, setReportHistory] = useState<DailyReport[]>([]);
@@ -393,6 +394,7 @@ export default function Cashier() {
         paymentMethod: 'cash',
         cashReceived: parseFloat(cashReceived),
         changeAmount: change,
+        sessionId: session.id
       };
 
       const orderRef = await addDoc(collection(db, 'orders'), orderData);
@@ -403,8 +405,8 @@ export default function Cashier() {
       if (session.id !== 'admin-bypass') {
         const sessionRef = doc(db, 'cashRegisterSessions', session.id);
         await updateDoc(sessionRef, {
-          cashSales: session.cashSales + total,
-          expectedCash: session.expectedCash + total
+          cashSales: increment(total),
+          expectedCash: increment(total)
         });
       }
 
@@ -455,8 +457,8 @@ export default function Cashier() {
       if (session.id !== 'admin-bypass') {
         const sessionRef = doc(db, 'cashRegisterSessions', session.id);
         await updateDoc(sessionRef, {
-          expenses: session.expenses + parseFloat(newExpense.amount),
-          expectedCash: session.expectedCash - parseFloat(newExpense.amount)
+          expenses: increment(parseFloat(newExpense.amount)),
+          expectedCash: increment(-parseFloat(newExpense.amount))
         });
       }
 
@@ -496,7 +498,7 @@ export default function Cashier() {
       
       await setDoc(reportRef, {
         date: today,
-        totalOrders: increment(orders.filter(o => o.type === 'walk-in' && o.status !== 'cancelled').length),
+        totalOrders: increment(orders.filter(o => o.sessionId === session.id && o.type === 'walk-in' && o.status !== 'cancelled').length),
         walkinSales: increment(session.cashSales),
         onlineSales: increment(session.onlineSales),
         totalExpenses: increment(session.expenses),
@@ -791,6 +793,21 @@ export default function Cashier() {
                       className="w-20 text-right bg-transparent border-b border-neutral-300 focus:border-orange-500 outline-none"
                     />
                   </div>
+                  <div className="flex justify-between items-center text-sm font-bold text-neutral-500">
+                    <span>Auto-print Receipt</span>
+                    <button 
+                      onClick={() => setAutoPrint(!autoPrint)}
+                      className={cn(
+                        "w-12 h-6 rounded-full transition-all relative",
+                        autoPrint ? "bg-orange-600" : "bg-neutral-200"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                        autoPrint ? "right-1" : "left-1"
+                      )} />
+                    </button>
+                  </div>
                   <div className="flex justify-between text-xl font-black pt-2 border-t border-neutral-200">
                     <span>Total</span>
                     <span className="text-orange-600">{formatCurrency(total)}</span>
@@ -819,21 +836,14 @@ export default function Cashier() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <button 
-                      onClick={() => handleConfirmPayment(false)}
-                      disabled={isProcessingPayment || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total}
-                      className="py-4 bg-neutral-100 text-neutral-900 rounded-2xl font-bold hover:bg-neutral-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isProcessingPayment ? '...' : 'Confirm'}
-                    </button>
-                    <button 
-                      onClick={() => handleConfirmPayment(true)}
+                      onClick={() => handleConfirmPayment(autoPrint)}
                       disabled={isProcessingPayment || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total}
                       className="py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
-                      {isProcessingPayment ? '...' : 'Confirm & Print'}
-                      <Printer className="w-4 h-4" />
+                      {isProcessingPayment ? '...' : 'Confirm Order'}
+                      {autoPrint && <Printer className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>
@@ -1170,6 +1180,83 @@ export default function Cashier() {
                       <p className="text-4xl font-black text-white">
                         {(dailyReport?.sessions || 0) + 1}
                       </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Transaction Log */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-px flex-1 bg-neutral-200" />
+                  <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400">Detailed Transaction Log</span>
+                  <div className="h-px flex-1 bg-neutral-200" />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Orders List */}
+                  <div className="bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-neutral-100 bg-neutral-50/50">
+                      <h3 className="text-sm font-black uppercase tracking-widest text-neutral-900">Session Orders</h3>
+                    </div>
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="text-[10px] font-black uppercase tracking-widest text-neutral-400 border-b border-neutral-100">
+                            <th className="px-6 py-4">ID</th>
+                            <th className="px-6 py-4">Items</th>
+                            <th className="px-6 py-4">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-50">
+                          {orders.filter(o => o.sessionId === session.id).map(order => (
+                            <tr key={order.id} className="text-sm">
+                              <td className="px-6 py-4 font-bold">#{order.id.slice(-4).toUpperCase()}</td>
+                              <td className="px-6 py-4 text-neutral-500">
+                                {order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}
+                              </td>
+                              <td className="px-6 py-4 font-black">{formatCurrency(order.total)}</td>
+                            </tr>
+                          ))}
+                          {orders.filter(o => o.sessionId === session.id).length === 0 && (
+                            <tr>
+                              <td colSpan={3} className="px-6 py-8 text-center text-neutral-400">No orders in this session</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Expenses List */}
+                  <div className="bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm overflow-hidden">
+                    <div className="p-6 border-b border-neutral-100 bg-neutral-50/50">
+                      <h3 className="text-sm font-black uppercase tracking-widest text-neutral-900">Session Expenses</h3>
+                    </div>
+                    <div className="max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="text-[10px] font-black uppercase tracking-widest text-neutral-400 border-b border-neutral-100">
+                            <th className="px-6 py-4">Type</th>
+                            <th className="px-6 py-4">Note</th>
+                            <th className="px-6 py-4">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-50">
+                          {expenses.map(expense => (
+                            <tr key={expense.id} className="text-sm">
+                              <td className="px-6 py-4 font-bold uppercase text-xs">{expense.type}</td>
+                              <td className="px-6 py-4 text-neutral-500">{expense.note}</td>
+                              <td className="px-6 py-4 font-black text-red-600">{formatCurrency(expense.amount)}</td>
+                            </tr>
+                          ))}
+                          {expenses.length === 0 && (
+                            <tr>
+                              <td colSpan={3} className="px-6 py-8 text-center text-neutral-400">No expenses in this session</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>

@@ -51,6 +51,7 @@ export interface Order {
   discount: number;
   status: OrderStatus;
   type: OrderType;
+  sessionId?: string;
   createdAt: any; // Firestore Timestamp
   deliveryAddress?: string;
   paymentMethod: 'cash' | 'online';

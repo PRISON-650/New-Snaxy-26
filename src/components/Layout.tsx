@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Navigate } from 'react-router-dom';
-import { ShoppingCart, User as UserIcon, Menu as MenuIcon, X, LogOut, LayoutDashboard, Utensils, ClipboardList, ChevronDown, ShoppingBag } from 'lucide-react';
+import { ShoppingCart, User as UserIcon, Menu as MenuIcon, X, LogOut, LayoutDashboard, Utensils, ClipboardList, ChevronDown, ShoppingBag, FileText } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { useCart } from '../CartContext';
 import { cn } from '../lib/utils';
@@ -26,6 +26,7 @@ export default function Layout({ children, admin = false }: LayoutProps) {
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
     { name: 'Menu Items', path: '/admin/menu', icon: Utensils },
     { name: 'Orders', path: '/admin/orders', icon: ClipboardList },
+    { name: 'Reports', path: '/admin/reports', icon: FileText },
     { name: 'POS (Cashier)', path: '/cashier', icon: ShoppingBag },
     ...(isSuperAdmin ? [{ name: 'Users', path: '/admin/users', icon: UserIcon }] : []),
   ] : [
