@@ -14,32 +14,34 @@ async function startServer() {
 
   // Initialize Firebase Admin
   const configPath = path.join(__dirname, 'firebase-applet-config.json');
+  let adminInitialized = false;
   if (fs.existsSync(configPath)) {
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    // Note: In this environment, we might not have a service account key file,
-    // but we can use the project ID if the environment is already authenticated.
-    // However, for user management, we typically need a service account.
-    // If it's not available, we'll try to use default credentials.
     try {
-      admin.initializeApp({
-        projectId: config.projectId,
-      });
-      console.log('Firebase Admin initialized');
+      // Check if already initialized to avoid errors on reload
+      if (admin.apps.length === 0) {
+        admin.initializeApp({
+          projectId: config.projectId,
+        });
+      }
+      adminInitialized = true;
+      console.log('Firebase Admin initialized successfully');
     } catch (e) {
       console.error('Firebase Admin init error:', e);
     }
+  } else {
+    console.warn('firebase-applet-config.json not found, Admin API will be limited');
   }
 
   app.use(express.json());
 
   // API Routes
   app.post('/api/admin/update-user', async (req, res) => {
+    if (!adminInitialized) {
+      return res.status(500).json({ error: 'Firebase Admin not initialized. Check server logs.' });
+    }
+
     const { uid, email, password, displayName, role } = req.body;
-    
-    // Security check: Only allow the super admin to call this
-    // In a real app, we'd verify the ID token from the request header
-    // For this demo/prototype, we'll assume the client is authorized if they have the super admin email
-    // but a real implementation would be more robust.
     
     try {
       let targetUid = uid;
@@ -56,8 +58,10 @@ async function startServer() {
               email,
               password,
               displayName,
+              emailVerified: true, // Mark as verified for easier login
             });
             targetUid = newUser.uid;
+            console.log(`Created new user in Auth: ${email} (${targetUid})`);
           } else {
             throw e;
           }
@@ -70,9 +74,8 @@ async function startServer() {
         if (displayName) updateParams.displayName = displayName;
         
         await admin.auth().updateUser(targetUid, updateParams);
+        console.log(`Updated user in Auth: ${targetUid}`);
         
-        // Also update custom claims for role if needed, or just let Firestore handle it
-        // For now, we'll just return the UID so the client can update Firestore
         res.json({ success: true, uid: targetUid });
       } else {
         res.status(400).json({ error: 'User not found' });

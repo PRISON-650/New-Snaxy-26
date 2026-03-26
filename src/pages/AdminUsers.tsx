@@ -66,7 +66,7 @@ export default function AdminUsers() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: newUser.email,
+          email: newUser.email.toLowerCase(),
           password: newUser.password,
           displayName: newUser.displayName,
           role: newUser.role
@@ -83,7 +83,7 @@ export default function AdminUsers() {
       const userRef = doc(db, 'users', result.uid);
       await setDoc(userRef, {
         uid: result.uid,
-        email: newUser.email,
+        email: newUser.email.toLowerCase(),
         displayName: newUser.displayName,
         role: newUser.role,
         password: newUser.password, // Store for super admin visibility

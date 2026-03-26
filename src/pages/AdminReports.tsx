@@ -37,7 +37,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 
 export default function AdminReports() {
+  const [activeTab, setActiveTab] = useState<'daily' | 'sessions'>('daily');
   const [reports, setReports] = useState<DailyReport[]>([]);
+  const [sessions, setSessions] = useState<CashRegisterSession[]>([]);
   const [selectedReport, setSelectedReport] = useState<DailyReport | null>(null);
   const [reportDetails, setReportDetails] = useState<{
     orders: Order[];
@@ -49,6 +51,7 @@ export default function AdminReports() {
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<DailyReport>>({});
 
+  // Real-time Daily Reports
   useEffect(() => {
     const q = query(collection(db, 'dailyReports'), orderBy('date', 'desc'), limit(60));
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -60,6 +63,86 @@ export default function AdminReports() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Real-time All Sessions (for the "Sessions" tab)
+  useEffect(() => {
+    const q = query(collection(db, 'cashRegisterSessions'), orderBy('startTime', 'desc'), limit(100));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setSessions(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CashRegisterSession)));
+    }, (error) => {
+      console.error('Error fetching sessions:', error);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Real-time Details for Selected Report
+  useEffect(() => {
+    if (!selectedReport) {
+      setReportDetails(null);
+      return;
+    }
+
+    setDetailsLoading(true);
+    const startDate = new Date(selectedReport.date);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(selectedReport.date);
+    endDate.setHours(23, 59, 59, 999);
+
+    const startTimestamp = Timestamp.fromDate(startDate);
+    const endTimestamp = Timestamp.fromDate(endDate);
+
+    const ordersQ = query(
+      collection(db, 'orders'),
+      where('createdAt', '>=', startTimestamp),
+      where('createdAt', '<=', endTimestamp)
+    );
+
+    const expensesQ = query(
+      collection(db, 'expenses'),
+      where('timestamp', '>=', startTimestamp),
+      where('timestamp', '<=', endTimestamp)
+    );
+
+    const sessionsQ = query(
+      collection(db, 'cashRegisterSessions'),
+      where('startTime', '>=', startTimestamp),
+      where('startTime', '<=', endTimestamp)
+    );
+
+    const unsubOrders = onSnapshot(ordersQ, (snap) => {
+      const orders = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
+      setReportDetails(prev => ({ 
+        orders, 
+        expenses: prev?.expenses || [], 
+        sessions: prev?.sessions || [] 
+      }));
+      setDetailsLoading(false);
+    });
+
+    const unsubExpenses = onSnapshot(expensesQ, (snap) => {
+      const expenses = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Expense));
+      setReportDetails(prev => ({ 
+        orders: prev?.orders || [], 
+        expenses, 
+        sessions: prev?.sessions || [] 
+      }));
+    });
+
+    const unsubSessions = onSnapshot(sessionsQ, (snap) => {
+      const sessions = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as CashRegisterSession));
+      setReportDetails(prev => ({ 
+        orders: prev?.orders || [], 
+        expenses: prev?.expenses || [], 
+        sessions 
+      }));
+    });
+
+    return () => {
+      unsubOrders();
+      unsubExpenses();
+      unsubSessions();
+    };
+  }, [selectedReport]);
 
   const handleUpdateReport = async () => {
     if (!selectedReport) return;
@@ -273,59 +356,165 @@ export default function AdminReports() {
             exit={{ opacity: 0, x: 20 }}
             className="space-y-8"
           >
-            <div>
-              <h1 className="text-4xl font-black tracking-tighter">ACCOUNTING BOOKS</h1>
-              <p className="text-neutral-500">View and manage historical daily reports and session details.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {reports.map((report) => (
-                <button
-                  key={report.id}
-                  onClick={() => fetchReportDetails(report)}
-                  className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm hover:shadow-xl hover:border-orange-500 transition-all text-left group"
+            <div className="flex justify-between items-end">
+              <div>
+                <h1 className="text-4xl font-black tracking-tighter">ACCOUNTING BOOKS</h1>
+                <p className="text-neutral-500">View and manage historical daily reports and session details.</p>
+              </div>
+              
+              <div className="flex bg-white p-1 rounded-2xl border border-neutral-100 shadow-sm">
+                <button 
+                  onClick={() => setActiveTab('daily')}
+                  className={cn(
+                    "px-6 py-2 rounded-xl text-sm font-bold transition-all",
+                    activeTab === 'daily' ? "bg-orange-600 text-white shadow-lg shadow-orange-200" : "text-neutral-400 hover:text-neutral-600"
+                  )}
                 >
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="w-12 h-12 bg-neutral-100 rounded-2xl flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-                      <Calendar className="w-6 h-6 text-neutral-400 group-hover:text-orange-600" />
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-neutral-300" />
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-2xl font-black tracking-tight">{report.date}</h3>
-                      <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">{report.sessions} Sessions</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-neutral-50">
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Sales</p>
-                        <p className="font-black text-orange-600">{formatCurrency((report.walkinSales || 0) + (report.onlineSales || 0))}</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Expenses</p>
-                        <p className="font-black text-red-500">-{formatCurrency(report.totalExpenses || 0)}</p>
-                      </div>
-                    </div>
-
-                    <div className={cn(
-                      "p-3 rounded-xl flex justify-between items-center",
-                      (report.difference || 0) >= 0 ? "bg-green-50" : "bg-red-50"
-                    )}>
-                      <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Difference</span>
-                      <span className={cn(
-                        "font-black text-sm",
-                        (report.difference || 0) >= 0 ? "text-green-600" : "text-red-600"
-                      )}>
-                        {(report.difference || 0) > 0 && '+'}
-                        {formatCurrency(report.difference || 0)}
-                      </span>
-                    </div>
-                  </div>
+                  Daily Reports
                 </button>
-              ))}
+                <button 
+                  onClick={() => setActiveTab('sessions')}
+                  className={cn(
+                    "px-6 py-2 rounded-xl text-sm font-bold transition-all",
+                    activeTab === 'sessions' ? "bg-orange-600 text-white shadow-lg shadow-orange-200" : "text-neutral-400 hover:text-neutral-600"
+                  )}
+                >
+                  Session Blocks
+                </button>
+              </div>
             </div>
+
+            {activeTab === 'daily' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {reports.map((report) => (
+                  <button
+                    key={report.id}
+                    onClick={() => setSelectedReport(report)}
+                    className="bg-white p-8 rounded-[3rem] border border-neutral-100 shadow-sm hover:shadow-2xl hover:border-orange-500 transition-all text-left group relative overflow-hidden"
+                  >
+                    {report.date === new Date().toISOString().split('T')[0] && (
+                      <div className="absolute top-0 right-0 px-4 py-1 bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest rounded-bl-2xl animate-pulse">
+                        Today's Live Book
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="w-12 h-12 bg-neutral-100 rounded-2xl flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                        <Calendar className="w-6 h-6 text-neutral-400 group-hover:text-orange-600" />
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-neutral-300" />
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-2xl font-black tracking-tight">{report.date}</h3>
+                        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">{report.sessions} Sessions Recorded</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-4 border-t border-neutral-50">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Total Sales</p>
+                          <p className="font-black text-orange-600 text-lg">{formatCurrency((report.walkinSales || 0) + (report.onlineSales || 0))}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Expenses</p>
+                          <p className="font-black text-red-500 text-lg">-{formatCurrency(report.totalExpenses || 0)}</p>
+                        </div>
+                      </div>
+
+                      <div className={cn(
+                        "p-4 rounded-2xl flex justify-between items-center",
+                        (report.difference || 0) >= 0 ? "bg-green-50" : "bg-red-50"
+                      )}>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Net Difference</span>
+                          <span className="text-[10px] text-neutral-400 font-bold">Expected vs Counted</span>
+                        </div>
+                        <span className={cn(
+                          "font-black text-lg",
+                          (report.difference || 0) >= 0 ? "text-green-600" : "text-red-600"
+                        )}>
+                          {(report.difference || 0) > 0 && '+'}
+                          {formatCurrency(report.difference || 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {sessions.map((session) => (
+                  <div 
+                    key={session.id}
+                    className={cn(
+                      "bg-white p-8 rounded-[3rem] border transition-all space-y-6 relative overflow-hidden group hover:shadow-2xl",
+                      session.status === 'open' ? "border-green-500 shadow-xl shadow-green-100/50" : "border-neutral-100 shadow-sm"
+                    )}
+                  >
+                    {session.status === 'open' && (
+                      <div className="absolute top-0 right-0 px-4 py-1 bg-green-500 text-white text-[10px] font-black uppercase tracking-widest rounded-bl-2xl flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                        Live Session
+                      </div>
+                    )}
+                    
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-neutral-100 rounded-[1.5rem] flex items-center justify-center group-hover:bg-blue-50 transition-colors">
+                        <User className="w-8 h-8 text-neutral-400 group-hover:text-blue-600" />
+                      </div>
+                      <div>
+                        <h3 className="text-2xl font-black tracking-tight">{session.cashierName}</h3>
+                        <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest flex items-center gap-2">
+                          <Calendar className="w-3 h-3" />
+                          {new Date(session.startTime?.toDate?.() || session.startTime).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-5 bg-neutral-50 rounded-[2rem] border border-neutral-100">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-1">Total Sales</p>
+                        <p className="text-xl font-black text-neutral-900">{formatCurrency(session.cashSales + session.onlineSales)}</p>
+                      </div>
+                      <div className="p-5 bg-red-50 rounded-[2rem] border border-red-100">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-red-400 mb-1">Expenses</p>
+                        <p className="text-xl font-black text-red-600">-{formatCurrency(session.expenses)}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 p-2">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-2 text-neutral-400">
+                          <Clock className="w-4 h-4" />
+                          <span className="text-xs font-bold uppercase tracking-widest">Timeline</span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <span className="text-xs font-black">{new Date(session.startTime?.toDate?.() || session.startTime).toLocaleTimeString()}</span>
+                          <span className="text-[10px] font-bold text-neutral-300">to</span>
+                          <span className="text-xs font-black">
+                            {session.endTime ? new Date(session.endTime?.toDate?.() || session.endTime).toLocaleTimeString() : 'ACTIVE'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div className="pt-4 border-t border-neutral-100 flex justify-between items-center">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Session Difference</p>
+                          <p className="text-[10px] text-neutral-300 font-bold">Expected vs Actual</p>
+                        </div>
+                        <span className={cn(
+                          "text-xl font-black",
+                          (session.difference || 0) >= 0 ? "text-green-600" : "text-red-600"
+                        )}>
+                          {formatCurrency(session.difference || 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </motion.div>
         ) : (
           <motion.div 

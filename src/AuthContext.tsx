@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             // Check for pre-authorized user by email
-            const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email));
+            const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email?.toLowerCase()));
             const querySnap = await getDocs(q);
             
             let initialRole: UserRole = 'customer';
@@ -121,61 +121,98 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginWithEmail = async (email: string, pass: string) => {
+    console.log('Attempting email login for:', email);
     try {
       // First try Firebase Auth (if user already registered)
       try {
         await signInWithEmailAndPassword(auth, email, pass);
+        console.log('Firebase Auth login successful');
         toast.success('Successfully logged in!');
         return;
       } catch (e: any) {
+        console.warn('Firebase Auth login failed:', e.code, e.message);
         // If user not found in Auth, check Firestore for staff password
         if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
+          console.log('Checking Firestore for fallback authentication...');
+          
+          // Try both doc ID lookup and field query for robustness
+          let staffData: any = null;
+          let staffSnap: any = null;
+
+          // 1. Try doc ID lookup (old system used email as ID)
           const staffDocRef = doc(db, 'users', email.toLowerCase());
-          const staffSnap = await getDoc(staffDocRef);
+          staffSnap = await getDoc(staffDocRef);
           
           if (staffSnap.exists()) {
-            const staffData = staffSnap.data();
-            
+            staffData = staffSnap.data();
+          } else {
+            // 2. Try field query (new system uses UID as ID)
+            const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase()));
+            const querySnap = await getDocs(q);
+            if (!querySnap.empty) {
+              staffSnap = querySnap.docs[0];
+              staffData = staffSnap.data();
+            }
+          }
+          
+          if (staffData) {
+            console.log('Found user in Firestore. Checking password...');
             if (staffData.password === pass) {
+              console.log('Password matches Firestore. Attempting auto-registration...');
               // Auto-register in Firebase Auth
               try {
                 const userCred = await createUserWithEmailAndPassword(auth, email, pass);
                 const firebaseUser = userCred.user;
+                console.log('Auto-registration successful. UID:', firebaseUser.uid);
                 
                 // Update profile
                 await updateProfile(firebaseUser, { displayName: staffData.displayName });
                 
-                // Move data to the real UID
+                // Move data to the real UID if it's currently indexed by email
                 const newUser: User = {
                   uid: firebaseUser.uid,
-                  email: email,
+                  email: email.toLowerCase(),
                   displayName: staffData.displayName,
                   photoURL: '',
                   role: staffData.role,
-                  createdAt: new Date().toISOString(),
+                  createdAt: staffData.createdAt || new Date().toISOString(),
                 };
                 
                 await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
                 
-                // Delete the old "pending" staff document
-                await deleteDoc(staffSnap.ref);
+                // Delete the old "pending" staff document if it was indexed by email
+                if (staffSnap.id === email.toLowerCase()) {
+                  await deleteDoc(staffSnap.ref);
+                }
                 
-                toast.success('Staff account activated and logged in!');
+                toast.success('Account activated and logged in!');
                 return;
               } catch (regError: any) {
                 console.error('Auto-registration error:', regError);
                 if (regError.code === 'auth/email-already-in-use') {
-                  // This happens if the user was "reset" by an admin
-                  // We can't easily update the password here without the old one
-                  // So we should tell them to use the password reset email
-                  throw new Error('This account is already active. If you forgot your password, please use the "Forgot Password" link.');
+                  throw new Error('This account is already active but the password entered is incorrect. Please use the "Forgot Password" link to reset it.');
                 }
                 throw new Error('Invalid email or password');
               }
+            } else {
+              console.warn('Password mismatch in Firestore');
             }
+          } else {
+            console.warn('User not found in Firestore either');
           }
         }
-        throw e;
+        
+        // Map common Firebase errors to user-friendly messages
+        let errorMessage = 'Failed to log in.';
+        if (e.code === 'auth/invalid-credential' || e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password') {
+          errorMessage = 'Invalid email or password. Please try again.';
+        } else if (e.code === 'auth/too-many-requests') {
+          errorMessage = 'Too many failed login attempts. Please try again later or reset your password.';
+        } else if (e.code === 'auth/operation-not-allowed') {
+          errorMessage = 'Email/Password login is not enabled. Please contact the administrator.';
+        }
+        
+        throw new Error(errorMessage);
       }
     } catch (error: any) {
       console.error('Email login error:', error);
