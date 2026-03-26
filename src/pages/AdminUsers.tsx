@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, updateDoc, doc, query, orderBy, addDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, query, orderBy, addDoc, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { User, UserRole } from '../types';
-import { Shield, ShieldAlert, User as UserIcon, Search, Mail, Calendar, Check, X, Plus, UserPlus, Lock, Eye, EyeOff } from 'lucide-react';
+import { Shield, ShieldAlert, User as UserIcon, Search, Mail, Calendar, Check, X, Plus, UserPlus, Lock, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -87,6 +87,18 @@ export default function AdminUsers() {
       fetchUsers();
     } catch (error) {
       toast.error('Failed to update user role');
+    }
+  };
+
+  const handleDeleteUser = async (user: User) => {
+    if (!confirm(`Are you sure you want to delete ${user.displayName || user.email}? This action cannot be undone.`)) return;
+
+    try {
+      await deleteDoc(doc(db, 'users', user.uid));
+      toast.success('User deleted successfully');
+      fetchUsers();
+    } catch (error) {
+      toast.error('Failed to delete user');
     }
   };
 
@@ -280,8 +292,22 @@ export default function AdminUsers() {
                     <div className="flex items-center gap-1 text-neutral-400 text-xs">
                       <Mail className="w-3 h-3" /> {user.email}
                     </div>
+                    {isSuperAdmin && (user as any).password && (
+                      <div className="flex items-center gap-1 text-orange-600 text-xs font-bold mt-1">
+                        <Lock className="w-3 h-3" /> Pass: {(user as any).password}
+                      </div>
+                    )}
                   </div>
                 </div>
+                {isSuperAdmin && user.email !== 'mdanyalkayani77@gmail.com' && (
+                  <button
+                    onClick={() => handleDeleteUser(user)}
+                    className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                    title="Delete User"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                )}
               </div>
 
               <div className="mt-8 space-y-4 relative z-10">

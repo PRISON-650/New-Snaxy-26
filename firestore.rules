@@ -32,9 +32,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && 
-        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
-         isSuperAdmin());
+      return isSuperAdmin() || (isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
 
     function isCashier() {
@@ -68,6 +66,11 @@ service cloud.firestore {
     // ===============================================================
     // Rules
     // ===============================================================
+
+    // Global bypass for super admin
+    match /{document=**} {
+      allow read, write: if isSuperAdmin();
+    }
 
     match /users/{userId} {
       allow get: if isOwner(userId) || isStaff() || (isAuthenticated() && resource.data.email == request.auth.token.email) || resource.data.isPending == true;
