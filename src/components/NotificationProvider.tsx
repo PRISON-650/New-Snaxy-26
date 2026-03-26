@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Bell, ShoppingBag, Package, CheckCircle2, Truck, XCircle, Info, ArrowRight } from 'lucide-react';
 import { Order, OrderStatus } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_ICONS: Record<OrderStatus, any> = {
   pending: ShoppingBag,
@@ -35,7 +36,7 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: 'Order has been Cancelled',
 };
 
-const AdminNotification = ({ order, t }: { order: Order; t: any }) => (
+const AdminNotification = ({ order, t, onClick }: { order: Order; t: any; onClick: () => void }) => (
   <motion.div
     initial={{ opacity: 0, y: 50, scale: 0.9 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -77,10 +78,7 @@ const AdminNotification = ({ order, t }: { order: Order; t: any }) => (
         <span className="text-[10px] font-black uppercase tracking-widest">Live Update</span>
       </div>
       <button 
-        onClick={() => {
-          window.location.href = '/admin/orders';
-          toast.dismiss(t);
-        }}
+        onClick={onClick}
         className="text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors flex items-center gap-1"
       >
         View Queue <ArrowRight className="w-3 h-3" />
@@ -129,7 +127,8 @@ interface NotificationContextType {}
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isCashier } = useAuth();
+  const navigate = useNavigate();
   const adminInitialLoad = useRef(true);
   const customerInitialLoad = useRef(true);
 
@@ -137,7 +136,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!user) return;
 
     let unsubscribeAdmin: (() => void) | undefined;
-    if (isAdmin) {
+    if (isAdmin || isCashier) {
       const adminQuery = query(
         collection(db, 'orders'),
         orderBy('createdAt', 'desc'),
@@ -154,7 +153,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           if (change.type === 'added') {
             const order = { id: change.doc.id, ...change.doc.data() } as Order;
             
-            toast.custom((t) => <AdminNotification order={order} t={t} />, {
+            toast.custom((t) => (
+              <AdminNotification 
+                order={order} 
+                t={t} 
+                onClick={() => {
+                  if (isCashier) {
+                    navigate('/cashier?tab=queue');
+                  } else {
+                    navigate('/admin/orders');
+                  }
+                  toast.dismiss(t);
+                }} 
+              />
+            ), {
               duration: 15000,
               position: 'top-right',
             });
@@ -193,7 +205,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       unsubscribeAdmin?.();
       unsubscribeCustomer();
     };
-  }, [user, isAdmin]);
+  }, [user, isAdmin, isCashier]);
 
   return (
     <NotificationContext.Provider value={{}}>

@@ -72,45 +72,45 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <CartProvider>
-          <NotificationProvider>
             <Router>
-              <Routes>
-              <Route path="/" element={<Layout><Home /></Layout>} />
-              <Route path="/menu" element={<Layout><Menu /></Layout>} />
-              <Route path="/checkout" element={<Layout><Checkout /></Layout>} />
-              <Route path="/orders" element={<ProtectedRoute><Layout><CustomerOrders /></Layout></ProtectedRoute>} />
-              <Route path="/order/:id" element={<Layout><OrderTracking /></Layout>} />
-              
-              {/* Admin Routes */}
-              <Route path="/admin" element={
-                <ProtectedRoute adminOnly>
-                  <Layout admin><Dashboard /></Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/menu" element={
-                <ProtectedRoute adminOnly>
-                  <Layout admin><AdminMenu /></Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/orders" element={
-                <ProtectedRoute adminOnly>
-                  <Layout admin><AdminOrders /></Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/admin/users" element={
-                <ProtectedRoute superAdminOnly>
-                  <Layout admin><AdminUsers /></Layout>
-                </ProtectedRoute>
-              } />
-              <Route path="/cashier" element={
-                <ProtectedRoute staffOnly>
-                  <Cashier />
-                </ProtectedRoute>
-              } />
-            </Routes>
-            <Toaster position="top-center" />
-          </Router>
-          </NotificationProvider>
+              <NotificationProvider>
+                <Routes>
+                  <Route path="/" element={<Layout><Home /></Layout>} />
+                  <Route path="/menu" element={<Layout><Menu /></Layout>} />
+                  <Route path="/checkout" element={<Layout><Checkout /></Layout>} />
+                  <Route path="/orders" element={<ProtectedRoute><Layout><CustomerOrders /></Layout></ProtectedRoute>} />
+                  <Route path="/order/:id" element={<Layout><OrderTracking /></Layout>} />
+                  
+                  {/* Admin Routes */}
+                  <Route path="/admin" element={
+                    <ProtectedRoute adminOnly>
+                      <Layout admin><Dashboard /></Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/admin/menu" element={
+                    <ProtectedRoute adminOnly>
+                      <Layout admin><AdminMenu /></Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/admin/orders" element={
+                    <ProtectedRoute adminOnly>
+                      <Layout admin><AdminOrders /></Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/admin/users" element={
+                    <ProtectedRoute superAdminOnly>
+                      <Layout admin><AdminUsers /></Layout>
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/cashier" element={
+                    <ProtectedRoute staffOnly>
+                      <Cashier />
+                    </ProtectedRoute>
+                  } />
+                </Routes>
+                <Toaster position="top-center" />
+              </NotificationProvider>
+            </Router>
         </CartProvider>
       </AuthProvider>
     </ErrorBoundary>

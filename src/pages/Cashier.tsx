@@ -26,7 +26,7 @@ import {
   DailyReport
 } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   Search, 
   Plus, 
@@ -55,6 +55,7 @@ import { motion, AnimatePresence } from 'motion/react';
 export default function Cashier() {
   const { user, isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [session, setSession] = useState<CashRegisterSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [openingBalance, setOpeningBalance] = useState('');
@@ -71,7 +72,8 @@ export default function Cashier() {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   
   const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState<'pos' | 'queue' | 'expenses' | 'report'>('pos');
+  const activeTab = (searchParams.get('tab') as 'pos' | 'queue' | 'expenses' | 'report') || 'pos';
+  const setActiveTab = (tab: string) => setSearchParams({ tab });
   
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [newExpense, setNewExpense] = useState({ type: '', amount: '', note: '' });
