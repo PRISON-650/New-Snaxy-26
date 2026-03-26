@@ -288,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (isSuperAdminEmail) {
             errorMessage = 'Super Admin account detected. Please use "Continue with Google" for first-time access or if you forgot your password.';
           } else {
-            errorMessage = 'Invalid email or password. Please double-check your credentials. If you have an account but forgot your password, use the "Forgot?" link. If you are new, please Sign Up.';
+            errorMessage = 'Invalid email or password. Please double-check your credentials. If you have an account but forgot your password, use the "Forgot?" link. If you are new, please Sign Up first.';
           }
         } else if (e.code === 'auth/too-many-requests') {
           errorMessage = 'Too many failed login attempts. Please try again later or reset your password.';
@@ -296,6 +296,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           errorMessage = 'Email/Password login is not enabled. Please contact the administrator.';
         } else if (e.code === 'auth/invalid-email') {
           errorMessage = 'The email address is badly formatted.';
+        } else if (e.code === 'auth/user-disabled') {
+          errorMessage = 'This account has been disabled. Please contact support.';
         }
         
         throw new Error(errorMessage);
@@ -348,7 +350,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (error.code === 'auth/weak-password') {
         errorMessage = 'Password is too weak. Please use at least 6 characters.';
       } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Invalid email address.';
+        errorMessage = 'Invalid email address format.';
+      } else if (error.code === 'auth/operation-not-allowed') {
+        errorMessage = 'Email/Password signup is not enabled. Please contact the administrator.';
       }
       toast.error(errorMessage);
       throw new Error(errorMessage);

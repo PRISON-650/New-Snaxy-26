@@ -50,10 +50,14 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         await signUp(email, password, displayName);
       }
     } catch (error: any) {
+      console.error('LoginModal: Auth error:', error);
       // If email already in use, offer to switch to sign in
-      if (error.message && error.message.includes('already registered')) {
+      if (error.message && (error.message.includes('already registered') || error.message.includes('email-already-in-use'))) {
+        toast.info('This email is already registered. Switching to Sign In.');
         setMode('signin');
         setIsEmailLogin(true);
+      } else {
+        toast.error(error.message || 'Authentication failed. Please try again.');
       }
     } finally {
       setIsLoading(false);
