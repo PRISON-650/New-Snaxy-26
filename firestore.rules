@@ -27,6 +27,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "mdanyalkayani77@gmail.com" || 
+         request.auth.token.email == "gotify.pk@gmail.com");
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -42,10 +48,6 @@ service cloud.firestore {
 
     function isStaff() {
       return isAdmin() || isCashier();
-    }
-
-    function isSuperAdmin() {
-      return isAuthenticated() && (request.auth.token.email == "mdanyalkayani77@gmail.com" || request.auth.token.email == "gotify.pk@gmail.com");
     }
 
     function isValidUser(data) {

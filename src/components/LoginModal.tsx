@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Mail, Lock, LogIn, Chrome } from 'lucide-react';
+import { X, Mail, Lock, LogIn, Chrome, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -11,10 +11,12 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const { user, login, loginWithEmail, resetPassword } = useAuth();
+  const { user, login, loginWithEmail, signUp, resetPassword } = useAuth();
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [isEmailLogin, setIsEmailLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   // Automatically close modal when user is logged in
@@ -24,14 +26,29 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }
   }, [user, isOpen, onClose]);
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await loginWithEmail(email, password);
+      if (mode === 'signin') {
+        await loginWithEmail(email, password);
+      } else {
+        if (!displayName) {
+          toast.error('Please enter your name');
+          return;
+        }
+        await signUp(email, password, displayName);
+      }
+    } catch (error) {
+      // Error handled in AuthContext
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const toggleMode = () => {
+    setMode(mode === 'signin' ? 'signup' : 'signin');
+    setIsEmailLogin(true); // Default to email when switching to signup
   };
 
   return (
@@ -54,31 +71,39 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           >
             <div className="p-8 space-y-8">
               <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-black tracking-tight">SIGN IN</h2>
+                <h2 className="text-3xl font-black tracking-tight uppercase">
+                  {mode === 'signin' ? 'Sign In' : 'Create Account'}
+                </h2>
                 <button onClick={onClose} className="p-2 hover:bg-neutral-100 rounded-full transition-colors">
                   <X className="w-6 h-6" />
                 </button>
               </div>
 
               <div className="space-y-4">
-                <button
-                  onClick={login}
-                  className="w-full py-4 bg-white border-2 border-neutral-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-neutral-50 transition-all active:scale-95"
-                >
-                  <Chrome className="w-5 h-5 text-blue-500" />
-                  Continue with Google
-                </button>
+                {mode === 'signin' && !isEmailLogin && (
+                  <button
+                    onClick={login}
+                    className="w-full py-4 bg-white border-2 border-neutral-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-neutral-50 transition-all active:scale-95"
+                  >
+                    <Chrome className="w-5 h-5 text-blue-500" />
+                    Continue with Google
+                  </button>
+                )}
 
-                <div className="relative py-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-neutral-100"></div>
+                {(mode === 'signup' || isEmailLogin) && (
+                  <div className="relative py-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-neutral-100"></div>
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase font-black tracking-widest text-neutral-400">
+                      <span className="bg-white px-4">
+                        {mode === 'signin' ? 'Or use email' : 'Enter your details'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="relative flex justify-center text-xs uppercase font-black tracking-widest text-neutral-400">
-                    <span className="bg-white px-4">Or use email</span>
-                  </div>
-                </div>
+                )}
 
-                {!isEmailLogin ? (
+                {!isEmailLogin && mode === 'signin' ? (
                   <button
                     onClick={() => setIsEmailLogin(true)}
                     className="w-full py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-black transition-all active:scale-95 flex items-center justify-center gap-2"
@@ -87,7 +112,24 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     Sign in with Email
                   </button>
                 ) : (
-                  <form onSubmit={handleEmailLogin} className="space-y-4">
+                  <form onSubmit={handleAuth} className="space-y-4">
+                    {mode === 'signup' && (
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Full Name</label>
+                        <div className="relative">
+                          <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                          <input
+                            required
+                            type="text"
+                            value={displayName}
+                            onChange={(e) => setDisplayName(e.target.value)}
+                            className="w-full pl-12 pr-4 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-bold"
+                            placeholder="John Doe"
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400 ml-2">Email Address</label>
                       <div className="relative">
@@ -106,19 +148,21 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     <div className="space-y-2">
                       <div className="flex justify-between items-center ml-2">
                         <label className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Password</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!email) {
-                              toast.error('Please enter your email first');
-                              return;
-                            }
-                            resetPassword(email);
-                          }}
-                          className="text-[10px] font-black uppercase tracking-widest text-orange-600 hover:underline"
-                        >
-                          Forgot?
-                        </button>
+                        {mode === 'signin' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!email) {
+                                toast.error('Please enter your email first');
+                                return;
+                              }
+                              resetPassword(email);
+                            }}
+                            className="text-[10px] font-black uppercase tracking-widest text-orange-600 hover:underline"
+                          >
+                            Forgot?
+                          </button>
+                        )}
                       </div>
                       <div className="relative">
                         <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
@@ -134,24 +178,50 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                     </div>
 
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setIsEmailLogin(false)}
-                        className="flex-1 py-4 bg-neutral-100 text-neutral-600 rounded-2xl font-bold hover:bg-neutral-200 transition-all"
-                      >
-                        Back
-                      </button>
+                      {mode === 'signin' && (
+                        <button
+                          type="button"
+                          onClick={() => setIsEmailLogin(false)}
+                          className="flex-1 py-4 bg-neutral-100 text-neutral-600 rounded-2xl font-bold hover:bg-neutral-200 transition-all"
+                        >
+                          Back
+                        </button>
+                      )}
                       <button
                         disabled={isLoading}
                         type="submit"
                         className="flex-[2] py-4 bg-orange-600 text-white rounded-2xl font-bold hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                       >
-                        {isLoading ? 'Signing in...' : 'Sign In'}
-                        <LogIn className="w-5 h-5" />
+                        {isLoading ? (
+                          <span className="flex items-center gap-2">
+                            <motion.div
+                              animate={{ rotate: 360 }}
+                              transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                              className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                            />
+                            Processing...
+                          </span>
+                        ) : (
+                          <>
+                            {mode === 'signin' ? 'Sign In' : 'Create Account'}
+                            <LogIn className="w-5 h-5" />
+                          </>
+                        )}
                       </button>
                     </div>
                   </form>
                 )}
+              </div>
+
+              <div className="pt-4 border-t border-neutral-100">
+                <button
+                  onClick={toggleMode}
+                  className="w-full text-center text-sm font-bold text-neutral-600 hover:text-orange-600 transition-colors"
+                >
+                  {mode === 'signin' 
+                    ? "Don't have an account? Sign Up" 
+                    : "Already have an account? Sign In"}
+                </button>
               </div>
 
               <p className="text-center text-xs text-neutral-400 leading-relaxed">

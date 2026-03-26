@@ -35,11 +35,39 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API Routes
-  app.post('/api/admin/update-user', async (req, res) => {
+  // Middleware to check if admin is initialized
+  const checkAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (!adminInitialized) {
       return res.status(500).json({ error: 'Firebase Admin not initialized. Check server logs.' });
     }
+    next();
+  };
+
+  // API Routes
+  app.post('/api/auth/signup', checkAdmin, async (req, res) => {
+    const { email, password, displayName } = req.body;
+    
+    if (!email || !password || !displayName) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    try {
+      const userRecord = await admin.auth().createUser({
+        email,
+        password,
+        displayName,
+        emailVerified: false,
+      });
+
+      console.log(`Successfully created new user: ${userRecord.uid}`);
+      res.json({ success: true, uid: userRecord.uid });
+    } catch (error: any) {
+      console.error('Signup API error:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/admin/update-user', checkAdmin, async (req, res) => {
 
     const { uid, email, password, displayName, role } = req.body;
     
@@ -93,6 +121,19 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // SPA fallback for development
+    app.use('*', async (req, res, next) => {
+      const url = req.originalUrl;
+      try {
+        let template = fs.readFileSync(path.resolve(__dirname, 'index.html'), 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+      } catch (e) {
+        vite.ssrFixStacktrace(e as Error);
+        next(e);
+      }
+    });
   } else {
     const distPath = path.join(__dirname, 'dist');
     app.use(express.static(distPath));

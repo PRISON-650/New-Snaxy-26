@@ -19,6 +19,7 @@ interface AuthContextType {
   loading: boolean;
   login: () => Promise<void>;
   loginWithEmail: (email: string, pass: string) => Promise<void>;
+  signUp: (email: string, pass: string, displayName: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   isAdmin: boolean;
@@ -34,15 +35,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log('AuthContext: Initializing onAuthStateChanged listener');
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('AuthContext: Auth state changed. Firebase User:', firebaseUser?.email, 'UID:', firebaseUser?.uid);
       if (firebaseUser) {
         const userRef = doc(db, 'users', firebaseUser.uid);
+        const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com' || firebaseUser.email === 'gotify.pk@gmail.com';
+        
         try {
+          console.log('AuthContext: Attempting to fetch user document:', firebaseUser.uid);
           const userSnap = await getDoc(userRef);
 
           if (userSnap.exists()) {
             const userData = userSnap.data() as User;
-            const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com' || firebaseUser.email === 'gotify.pk@gmail.com';
             
             if (isAdminEmail && userData.role !== 'admin') {
               const updatedUser = { ...userData, role: 'admin' as UserRole };
@@ -54,7 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             console.log('Auth sync: User document not found, checking for pre-authorized record...');
             // Check for pre-authorized user by email
-            let initialRole: UserRole = 'customer';
+            let initialRole: UserRole = isAdminEmail ? 'admin' : 'customer';
             let initialDisplayName = firebaseUser.displayName || '';
 
             try {
@@ -64,20 +69,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               if (!querySnap.empty) {
                 const pendingDoc = querySnap.docs[0];
                 const pendingData = pendingDoc.data();
-                initialRole = pendingData.role || 'customer';
+                initialRole = pendingData.role || initialRole;
                 initialDisplayName = pendingData.displayName || initialDisplayName;
                 
                 console.log('Auth sync: Found pre-authorized record with role:', initialRole);
                 // Delete the pending document
                 await deleteDoc(pendingDoc.ref);
-              } else {
-                const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com' || firebaseUser.email === 'gotify.pk@gmail.com';
-                if (isAdminEmail) initialRole = 'admin';
               }
-            } catch (queryError) {
-              console.warn('Auth sync: Could not query for pre-authorized user (likely permission denied). Defaulting to customer role.');
-              const isAdminEmail = firebaseUser.email === 'mdanyalkayani77@gmail.com' || firebaseUser.email === 'gotify.pk@gmail.com';
-              if (isAdminEmail) initialRole = 'admin';
+            } catch (queryError: any) {
+              console.warn('Auth sync: Could not query for pre-authorized user (likely permission denied).');
+              if (queryError.code === 'permission-denied') {
+                handleFirestoreError(queryError, OperationType.LIST, 'users');
+              }
             }
 
             const newUser: User = {
@@ -95,23 +98,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (error: any) {
           console.error('Auth sync error:', error);
-          // If we fail here, at least try to set a minimal user state if we have a firebaseUser
-          // so the app doesn't just hang or show "not logged in"
-          if (firebaseUser) {
-            const fallbackUser: User = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email!,
-              displayName: firebaseUser.displayName || '',
-              photoURL: firebaseUser.photoURL || '',
-              role: 'customer',
-              createdAt: new Date().toISOString(),
-            };
-            setUser(fallbackUser);
+          
+          if (error.code === 'permission-denied') {
+            handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
           }
           
-          if (error.message?.includes('permission-denied')) {
-            console.warn('Permission denied during auth sync - this is expected if rules are still propagating or user is new');
-          } else {
+          // Fallback to basic user info from Auth if Firestore fails
+          const fallbackUser: User = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email!,
+            displayName: firebaseUser.displayName || '',
+            photoURL: firebaseUser.photoURL || '',
+            role: isAdminEmail ? 'admin' : 'customer',
+            createdAt: new Date().toISOString(),
+          };
+          setUser(fallbackUser);
+          
+          if (!error.message?.includes('permission-denied')) {
             toast.error('Error syncing user data. You might have limited access.');
           }
         } finally {
@@ -163,19 +166,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           let staffSnap: any = null;
 
           // 1. Try doc ID lookup (old system used email as ID)
-          const staffDocRef = doc(db, 'users', email.toLowerCase());
-          staffSnap = await getDoc(staffDocRef);
-          
-          if (staffSnap.exists()) {
-            staffData = staffSnap.data();
-          } else {
-            // 2. Try field query (new system uses UID as ID)
-            const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase()));
-            const querySnap = await getDocs(q);
-            if (!querySnap.empty) {
-              staffSnap = querySnap.docs[0];
+          try {
+            const staffDocRef = doc(db, 'users', email.toLowerCase());
+            staffSnap = await getDoc(staffDocRef);
+            
+            if (staffSnap.exists()) {
               staffData = staffSnap.data();
+            } else {
+              // 2. Try field query (new system uses UID as ID)
+              const q = query(collection(db, 'users'), where('email', '==', email.toLowerCase()));
+              const querySnap = await getDocs(q);
+              if (!querySnap.empty) {
+                staffSnap = querySnap.docs[0];
+                staffData = staffSnap.data();
+              }
             }
+          } catch (staffError: any) {
+            console.warn('Fallback auth check failed (likely permission denied):', staffError.message);
+            // If we can't read the doc, we can't do the fallback. This is normal for non-pending users.
           }
           
           if (staffData) {
@@ -243,6 +251,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signUp = async (email: string, pass: string, displayName: string) => {
+    try {
+      const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+      const firebaseUser = userCred.user;
+      
+      await updateProfile(firebaseUser, { displayName });
+      
+      const newUser: User = {
+        uid: firebaseUser.uid,
+        email: email.toLowerCase(),
+        displayName,
+        photoURL: '',
+        role: 'customer',
+        createdAt: new Date().toISOString(),
+      };
+      
+      await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+      setUser(newUser);
+      toast.success('Account created successfully!');
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      let errorMessage = 'Failed to create account.';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'This email is already in use. Please sign in instead.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Please use at least 6 characters.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      }
+      toast.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+  };
+
   const resetPassword = async (email: string) => {
     try {
       const { sendPasswordResetEmail } = await import('firebase/auth');
@@ -284,7 +326,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, isAdmin, isSuperAdmin]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithEmail, resetPassword, logout, isAdmin, isSuperAdmin, isCashier, isStaff }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithEmail, signUp, resetPassword, logout, isAdmin, isSuperAdmin, isCashier, isStaff }}>
       {children}
     </AuthContext.Provider>
   );
