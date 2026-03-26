@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    // Collection: users
+    // Fields: uid, email, displayName, photoURL, role, createdAt
+    //
+    // Collection: categories
+    // Fields: name, image, order
+    //
+    // Collection: menuItems
+    // Fields: name, description, price, categoryId, image, isAvailable, isFeatured, calories
+    //
+    // Collection: orders
+    // Fields: customerId, customerName, customerEmail, items, total, status, createdAt, deliveryAddress, paymentMethod
+    //
+    // Collection: settings
+    // Fields: isOpen, deliveryFee, minOrder
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         isSuperAdmin());
+    }
+
+    function isCashier() {
+      return isAuthenticated() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'cashier');
+    }
+
+    function isStaff() {
+      return isAdmin() || isCashier();
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && request.auth.token.email == "gotify.pk@gmail.com" && request.auth.token.email_verified == true;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'role']) &&
+             data.role in ['customer', 'admin', 'cashier'] &&
+             data.email is string &&
+             (data.keys().hasAll(['uid']) ? data.uid is string : true);
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['items', 'total', 'status', 'createdAt', 'type', 'paymentMethod']) &&
+             data.total is number &&
+             data.status in ['pending', 'preparing', 'ready', 'delivered', 'cancelled', 'completed'] &&
+             data.type in ['online', 'walk-in'] &&
+             data.paymentMethod in ['cash', 'online'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isStaff() || (isAuthenticated() && resource.data.email == request.auth.token.email);
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isSuperAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && 
+                    (isSuperAdmin() || request.resource.data.role == resource.data.role);
+      allow delete: if isSuperAdmin() || (isAuthenticated() && resource.data.email == request.auth.token.email);
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /menuItems/{itemId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.customerId || isStaff());
+      allow create: if isAuthenticated() && isValidOrder(request.resource.data) && (request.auth.uid == request.resource.data.customerId || isStaff());
+      allow update: if isStaff();
+    }
+
+    match /cashRegisterSessions/{sessionId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff();
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isStaff();
+      allow create: if isStaff();
+      allow update: if isStaff();
+    }
+
+    match /dailyReports/{reportId} {
+      allow read: if isStaff();
+      allow create: if isAdmin();
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

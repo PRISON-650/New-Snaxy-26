@@ -1,0 +1,7 @@
+{
+  "name": "Remix: Snaxy 26",
+  "description": "A high-converting fast-food ordering platform with customer interface and restaurant management dashboard.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

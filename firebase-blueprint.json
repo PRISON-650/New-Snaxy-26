@@ -1,0 +1,164 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["customer", "admin", "cashier"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Menu categories like Burgers, Drinks, etc.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "image": { "type": "string" },
+        "order": { "type": "integer" }
+      },
+      "required": ["name"]
+    },
+    "MenuItem": {
+      "title": "MenuItem",
+      "description": "Individual food items",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "categoryId": { "type": "string" },
+        "image": { "type": "string" },
+        "isAvailable": { "type": "boolean" },
+        "isFeatured": { "type": "boolean" },
+        "calories": { "type": "integer" }
+      },
+      "required": ["name", "price", "categoryId"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order details",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "ready", "delivered", "cancelled", "completed"] },
+        "type": { "type": "string", "enum": ["online", "walk-in"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "deliveryAddress": { "type": "string" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "online"] },
+        "cashReceived": { "type": "number" },
+        "changeAmount": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["items", "total", "status", "createdAt", "type", "paymentMethod"]
+    },
+    "CashRegisterSession": {
+      "title": "CashRegisterSession",
+      "description": "Cashier shift session",
+      "type": "object",
+      "properties": {
+        "cashierId": { "type": "string" },
+        "cashierName": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "openingBalance": { "type": "number" },
+        "closingBalance": { "type": "number" },
+        "cashSales": { "type": "number" },
+        "onlineSales": { "type": "number" },
+        "expenses": { "type": "number" },
+        "expectedCash": { "type": "number" },
+        "actualCash": { "type": "number" },
+        "difference": { "type": "number" },
+        "status": { "type": "string", "enum": ["open", "closed"] }
+      },
+      "required": ["cashierId", "startTime", "openingBalance", "status"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Shop expenses",
+      "type": "object",
+      "properties": {
+        "cashierId": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "note": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "sessionId": { "type": "string" }
+      },
+      "required": ["cashierId", "type", "amount", "timestamp", "sessionId"]
+    },
+    "DailyReport": {
+      "title": "DailyReport",
+      "description": "End of day sales report",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "totalOrders": { "type": "integer" },
+        "walkinSales": { "type": "number" },
+        "onlineSales": { "type": "number" },
+        "totalExpenses": { "type": "number" },
+        "cashExpected": { "type": "number" },
+        "cashCounted": { "type": "number" },
+        "difference": { "type": "number" },
+        "generatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["date", "totalOrders", "walkinSales", "onlineSales", "totalExpenses", "cashExpected", "cashCounted", "generatedAt"]
+    },
+    "StoreSettings": {
+      "title": "StoreSettings",
+      "description": "Global store settings",
+      "type": "object",
+      "properties": {
+        "isOpen": { "type": "boolean" },
+        "deliveryFee": { "type": "number" },
+        "minOrder": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Menu categories"
+    },
+    "/menuItems/{itemId}": {
+      "schema": "MenuItem",
+      "description": "Menu items"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer orders"
+    },
+    "/cashRegisterSessions/{sessionId}": {
+      "schema": "CashRegisterSession",
+      "description": "Cashier sessions"
+    },
+    "/expenses/{expenseId}": {
+      "schema": "Expense",
+      "description": "Shop expenses"
+    },
+    "/dailyReports/{reportId}": {
+      "schema": "DailyReport",
+      "description": "Daily sales reports"
+    },
+    "/settings/store": {
+      "schema": "StoreSettings",
+      "description": "Store configuration"
+    }
+  }
+}
