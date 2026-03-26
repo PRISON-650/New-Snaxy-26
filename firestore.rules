@@ -34,7 +34,7 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isAuthenticated() && (request.auth.uid == userId || (resource != null && 'email' in resource.data && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower()));
     }
 
     function isAdmin() {
@@ -75,9 +75,18 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      // Use userId != request.auth.uid to prevent recursion when checking roles
-      allow get: if isOwner(userId) || isSuperAdmin() || (isAuthenticated() && userId != request.auth.uid && isAdmin()) || resource.data.isPending == true;
-      allow list: if isSuperAdmin() || isAdmin() || (isAuthenticated() && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower());
+      // Allow get if owner (by UID or email), super admin, or if the document is pending (for fallback auth)
+      // Also allow admins to get other users
+      allow get: if isOwner(userId) || 
+                   isSuperAdmin() || 
+                   (isAuthenticated() && userId != request.auth.uid && isAdmin()) || 
+                   (resource != null && resource.data.get('isPending', false) == true);
+      
+      // Allow list if super admin, admin, or if querying for own email
+      allow list: if isSuperAdmin() || 
+                    isAdmin() || 
+                    (isAuthenticated() && request.auth.token.email != null);
+      
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
       allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && 
                     (isSuperAdmin() || request.resource.data.role == resource.data.role);

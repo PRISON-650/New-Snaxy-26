@@ -40,7 +40,16 @@ function ProtectedRoute({ children, adminOnly = false, superAdminOnly = false, s
     staffOnly
   });
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-orange-100 border-t-orange-600 rounded-full animate-spin" />
+          <p className="text-neutral-500 font-medium animate-pulse">Verifying access...</p>
+        </div>
+      </div>
+    );
+  }
   if (!user) {
     console.log('ProtectedRoute: No user, redirecting to /');
     return <Navigate to="/" />;

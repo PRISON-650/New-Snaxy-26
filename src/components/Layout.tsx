@@ -39,16 +39,28 @@ export default function Layout({ children, admin = false }: LayoutProps) {
     return <Navigate to="/cashier" replace />;
   }
 
-  if (loading && !user) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-neutral-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-            className="w-12 h-12 border-4 border-orange-200 border-t-orange-600 rounded-full"
-          />
-          <p className="text-neutral-500 font-medium animate-pulse">Syncing your account...</p>
+        <div className="flex flex-col items-center gap-6 p-8 max-w-sm text-center">
+          <div className="relative">
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+              className="w-16 h-16 border-4 border-orange-100 border-t-orange-600 rounded-full"
+            />
+            <motion.div
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="absolute inset-0 flex items-center justify-center"
+            >
+              <div className="w-2 h-2 bg-orange-600 rounded-full" />
+            </motion.div>
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-black tracking-tight uppercase text-neutral-900">Snaxy 26</h2>
+            <p className="text-neutral-500 font-medium text-sm animate-pulse">Syncing your secure session...</p>
+          </div>
         </div>
       </div>
     );
@@ -121,12 +133,10 @@ export default function Layout({ children, admin = false }: LayoutProps) {
                         <div className="p-4 border-b border-neutral-100">
                           <p className="text-sm font-bold text-neutral-900 truncate">{user.displayName || 'User'}</p>
                           <p className="text-xs text-neutral-500 truncate">{user.email}</p>
-                          {isAdmin && (
-                            <div className="mt-2 px-2 py-1 bg-neutral-100 rounded-lg">
-                              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Role: {user.role}</p>
-                              {isSuperAdmin && <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">Super Admin</p>}
-                            </div>
-                          )}
+                          <div className="mt-2 px-2 py-1 bg-neutral-100 rounded-lg flex items-center justify-between">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Role: {user.role}</p>
+                            {isSuperAdmin && <p className="text-[10px] font-black uppercase tracking-widest text-orange-600">Super Admin</p>}
+                          </div>
                         </div>
                         
                         <div className="p-2">
