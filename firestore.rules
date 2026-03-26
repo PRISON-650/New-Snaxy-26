@@ -75,12 +75,13 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isOwner(userId) || isStaff() || (isAuthenticated() && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower()) || resource.data.isPending == true;
-      allow list: if isStaff() || (isAuthenticated() && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower());
+      // Use userId != request.auth.uid to prevent recursion when checking roles
+      allow get: if isOwner(userId) || isSuperAdmin() || (isAuthenticated() && userId != request.auth.uid && isAdmin()) || resource.data.isPending == true;
+      allow list: if isSuperAdmin() || isAdmin() || (isAuthenticated() && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower());
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
       allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && 
                     (isSuperAdmin() || request.resource.data.role == resource.data.role);
-      allow delete: if isSuperAdmin() || (isAuthenticated() && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower());
+      allow delete: if isSuperAdmin();
     }
 
     match /categories/{categoryId} {

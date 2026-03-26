@@ -288,7 +288,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (isSuperAdminEmail) {
             errorMessage = 'Super Admin account detected. Please use "Continue with Google" for first-time access or if you forgot your password.';
           } else {
-            errorMessage = 'Invalid email or password. Please double-check your credentials. If you have an account but forgot your password, use the "Forgot?" link. If you are new, please Sign Up first.';
+            errorMessage = 'Invalid email or password. Please double-check your credentials. If you are new, please Sign Up first. If you have an account but forgot your password, use the "Forgot?" link.';
           }
         } else if (e.code === 'auth/too-many-requests') {
           errorMessage = 'Too many failed login attempts. Please try again later or reset your password.';
