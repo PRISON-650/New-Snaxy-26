@@ -99,7 +99,7 @@ export default function App() {
                     </ProtectedRoute>
                   } />
                   <Route path="/admin/users" element={
-                    <ProtectedRoute adminOnly>
+                    <ProtectedRoute superAdminOnly>
                       <Layout admin><AdminUsers /></Layout>
                     </ProtectedRoute>
                   } />
@@ -117,7 +117,7 @@ export default function App() {
                 <Toaster 
                   position="top-right" 
                   toastOptions={{
-                    duration: 3000,
+                    duration: 100,
                     style: { marginTop: '80px' }
                   }}
                 />

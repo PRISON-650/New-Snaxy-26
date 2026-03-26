@@ -8,7 +8,9 @@ import {
   limit,
   Timestamp,
   doc,
-  getDoc
+  getDoc,
+  onSnapshot,
+  updateDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { DailyReport, Order, Expense, CashRegisterSession } from '../types';
@@ -26,9 +28,13 @@ import {
   Clock,
   User,
   Package,
-  AlertCircle
+  AlertCircle,
+  Edit2,
+  Save,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toast } from 'sonner';
 
 export default function AdminReports() {
   const [reports, setReports] = useState<DailyReport[]>([]);
@@ -40,21 +46,34 @@ export default function AdminReports() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<Partial<DailyReport>>({});
 
   useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        const q = query(collection(db, 'dailyReports'), orderBy('date', 'desc'), limit(60));
-        const snap = await getDocs(q);
-        setReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyReport)));
-      } catch (error) {
-        console.error('Error fetching reports:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchReports();
+    const q = query(collection(db, 'dailyReports'), orderBy('date', 'desc'), limit(60));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyReport)));
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching reports:', error);
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
+
+  const handleUpdateReport = async () => {
+    if (!selectedReport) return;
+    try {
+      await updateDoc(doc(db, 'dailyReports', selectedReport.id), editData);
+      toast.success('Report updated successfully');
+      setIsEditing(false);
+      // Update selected report locally to reflect changes
+      setSelectedReport({ ...selectedReport, ...editData });
+    } catch (error) {
+      console.error('Error updating report:', error);
+      toast.error('Failed to update report');
+    }
+  };
 
   const fetchReportDetails = async (report: DailyReport) => {
     setDetailsLoading(true);
@@ -349,18 +368,60 @@ export default function AdminReports() {
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {[
-                    { label: 'Total Sales', value: formatCurrency((selectedReport.walkinSales || 0) + (selectedReport.onlineSales || 0)), icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50' },
-                    { label: 'Total Expenses', value: formatCurrency(selectedReport.totalExpenses || 0), icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
-                    { label: 'Net Cash', value: formatCurrency(selectedReport.cashExpected || 0), icon: Banknote, color: 'text-neutral-900', bg: 'bg-neutral-50' },
-                    { label: 'Total Orders', value: (selectedReport.totalOrders || 0).toString(), icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { key: 'walkinSales', label: 'Walk-in Sales', value: selectedReport.walkinSales || 0, icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50' },
+                    { key: 'onlineSales', label: 'Online Sales', value: selectedReport.onlineSales || 0, icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { key: 'totalExpenses', label: 'Total Expenses', value: selectedReport.totalExpenses || 0, icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
+                    { key: 'cashCounted', label: 'Cash Counted', value: selectedReport.cashCounted || 0, icon: Banknote, color: 'text-neutral-900', bg: 'bg-neutral-50' },
                   ].map((stat, idx) => (
                     <div key={idx} className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm space-y-4">
-                      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bg)}>
-                        <stat.icon className={cn("w-5 h-5", stat.color)} />
+                      <div className="flex justify-between items-start">
+                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bg)}>
+                          <stat.icon className={cn("w-5 h-5", stat.color)} />
+                        </div>
+                        {!isEditing ? (
+                          <button 
+                            onClick={() => {
+                              setIsEditing(true);
+                              setEditData({
+                                walkinSales: selectedReport.walkinSales || 0,
+                                onlineSales: selectedReport.onlineSales || 0,
+                                totalExpenses: selectedReport.totalExpenses || 0,
+                                cashCounted: selectedReport.cashCounted || 0
+                              });
+                            }}
+                            className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-400 transition-colors"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <div className="flex gap-1">
+                            <button 
+                              onClick={handleUpdateReport}
+                              className="p-2 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors"
+                            >
+                              <Save className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => setIsEditing(false)}
+                              className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">{stat.label}</p>
-                        <h3 className="text-2xl font-black tracking-tight">{stat.value}</h3>
+                        {isEditing ? (
+                          <input 
+                            type="number"
+                            value={editData[stat.key as keyof DailyReport] as number}
+                            onChange={(e) => setEditData({ ...editData, [stat.key]: parseFloat(e.target.value) || 0 })}
+                            className="w-full bg-neutral-50 border border-neutral-100 rounded-lg px-2 py-1 text-xl font-black focus:outline-none focus:ring-2 focus:ring-orange-600/20"
+                          />
+                        ) : (
+                          <h3 className="text-2xl font-black tracking-tight">{formatCurrency(stat.value)}</h3>
+                        )}
                       </div>
                     </div>
                   ))}

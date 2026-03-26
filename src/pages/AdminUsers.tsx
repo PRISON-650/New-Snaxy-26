@@ -54,32 +54,50 @@ export default function AdminUsers() {
     
     setIsSubmitting(true);
     try {
-      // Check if user already exists
+      // Check if user already exists in Firestore
       const existing = users.find(u => u.email.toLowerCase() === newUser.email.toLowerCase());
       if (existing) {
         toast.error('A user with this email already exists');
         return;
       }
 
-      // We store the password in Firestore for staff login
-      // In a real app, this should be handled by Firebase Admin SDK or a Cloud Function
-      const userRef = doc(db, 'users', newUser.email.toLowerCase());
+      // Try to create in Firebase Auth via Admin API
+      const response = await fetch('/api/admin/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newUser.email,
+          password: newUser.password,
+          displayName: newUser.displayName,
+          role: newUser.role
+        })
+      });
+
+      const result = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create user in Auth');
+      }
+
+      // Store in Firestore with the real UID from Auth
+      const userRef = doc(db, 'users', result.uid);
       await setDoc(userRef, {
+        uid: result.uid,
         email: newUser.email,
         displayName: newUser.displayName,
         role: newUser.role,
-        password: newUser.password, // Store password for staff login
+        password: newUser.password, // Store for super admin visibility
         createdAt: new Date().toISOString(),
-        isPending: true
+        isPending: false // No longer pending as it's created in Auth
       });
 
       toast.success('User added successfully');
       setIsAddModalOpen(false);
       setNewUser({ email: '', displayName: '', role: 'customer', password: '' });
       fetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Add user error:', error);
-      toast.error('Failed to add user');
+      toast.error(error.message || 'Failed to add user');
     } finally {
       setIsSubmitting(false);
     }
@@ -115,24 +133,42 @@ export default function AdminUsers() {
 
     setIsSubmitting(true);
     try {
+      // If password is provided, update it in Firebase Auth via Admin API
+      if (editUser.password) {
+        const response = await fetch('/api/admin/update-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: selectedUser.uid,
+            password: editUser.password,
+            displayName: editUser.displayName,
+            role: editUser.role
+          })
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to update user in Auth');
+        }
+      }
+
       const updates: any = {
         displayName: editUser.displayName,
         role: editUser.role,
       };
 
-      // If password is provided, it means we are resetting it
       if (editUser.password) {
         updates.password = editUser.password;
-        updates.isPending = true;
+        updates.isPending = false;
       }
 
       await updateDoc(doc(db, 'users', selectedUser.uid), updates);
       toast.success('User updated successfully');
       setIsEditModalOpen(false);
       fetchUsers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Update user error:', error);
-      toast.error('Failed to update user');
+      toast.error(error.message || 'Failed to update user');
     } finally {
       setIsSubmitting(false);
     }

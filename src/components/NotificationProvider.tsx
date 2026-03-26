@@ -155,6 +155,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           if (change.type === 'added') {
             const order = { id: change.doc.id, ...change.doc.data() } as Order;
             
+            // Only show notification for pending orders
+            if (order.status !== 'pending') return;
+
             toast.custom((t) => (
               <AdminNotification 
                 order={order} 
@@ -169,7 +172,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 }} 
               />
             ), {
-              duration: 4000,
+              duration: 200,
               position: 'top-right',
             });
 
@@ -196,7 +199,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           const order = { id: change.doc.id, ...change.doc.data() } as Order;
           
           toast.custom((t) => <CustomerNotification order={order} t={t} />, {
-            duration: 3000,
+            duration: 200,
             position: 'bottom-right',
           });
         }

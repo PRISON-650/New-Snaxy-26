@@ -425,14 +425,15 @@ export default function Cashier() {
       setCart([]);
       setDiscount(0);
       setCashReceived('');
-      setIsReceiptModalOpen(true);
-      
       if (shouldPrint) {
+        setIsReceiptModalOpen(true);
         setTimeout(() => {
           if (document.getElementById('receipt-print')) {
             printReceipt();
           }
         }, 500);
+      } else {
+        toast.success('Order confirmed successfully');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'orders');

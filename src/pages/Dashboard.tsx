@@ -1,50 +1,56 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, where, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Order, MenuItem } from '../types';
+import { Order, MenuItem, DailyReport } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { TrendingUp, ShoppingBag, Banknote, Users, ArrowUpRight, ArrowDownRight, Package, Clock } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { TrendingUp, ShoppingBag, Banknote, Clock, ArrowUpRight, ArrowDownRight, Package } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [reports, setReports] = useState<DailyReport[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const fetchData = async () => {
-      const ordersSnap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
-      setOrders(ordersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
-
-      const itemsSnap = await getDocs(collection(db, 'menuItems'));
-      setMenuItems(itemsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as MenuItem)));
+    // Real-time orders
+    const ordersQuery = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(50));
+    const unsubscribeOrders = onSnapshot(ordersQuery, (snap) => {
+      setOrders(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order)));
       setLoading(false);
+    });
+
+    // Real-time reports for chart
+    const reportsQuery = query(collection(db, 'dailyReports'), orderBy('date', 'desc'), limit(7));
+    const unsubscribeReports = onSnapshot(reportsQuery, (snap) => {
+      setReports(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyReport)).reverse());
+    });
+
+    return () => {
+      unsubscribeOrders();
+      unsubscribeReports();
     };
-    fetchData();
   }, []);
 
-  const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
-  const totalOrders = orders.length;
-  const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+  const today = new Date().toISOString().split('T')[0];
+  const todayReport = reports.find(r => r.date === today);
+  
+  const totalRevenue = reports.reduce((sum, r) => sum + (r.walkinSales || 0) + (r.onlineSales || 0), 0);
+  const totalOrders = reports.reduce((sum, r) => sum + (r.totalOrders || 0), 0);
+  const totalExpenses = reports.reduce((sum, r) => sum + (r.totalExpenses || 0), 0);
   const activeOrders = orders.filter(o => ['pending', 'preparing', 'ready'].includes(o.status)).length;
 
-  const chartData = [
-    { name: 'Mon', revenue: 4000 },
-    { name: 'Tue', revenue: 3000 },
-    { name: 'Wed', revenue: 2000 },
-    { name: 'Thu', revenue: 2780 },
-    { name: 'Fri', revenue: 1890 },
-    { name: 'Sat', revenue: 2390 },
-    { name: 'Sun', revenue: 3490 },
-  ];
+  const chartData = reports.map(r => ({
+    name: r.date.split('-').slice(1).join('/'),
+    revenue: (r.walkinSales || 0) + (r.onlineSales || 0)
+  }));
 
   const stats = [
     { label: 'Total Revenue', value: formatCurrency(totalRevenue), icon: Banknote, trend: '+12.5%', color: 'bg-green-500' },
     { label: 'Total Orders', value: totalOrders.toString(), icon: ShoppingBag, trend: '+8.2%', color: 'bg-blue-500' },
-    { label: 'Avg. Order', value: formatCurrency(avgOrderValue), icon: TrendingUp, trend: '-2.4%', color: 'bg-purple-500' },
+    { label: 'Total Expenses', value: formatCurrency(totalExpenses), icon: TrendingUp, trend: '-2.4%', color: 'bg-red-500' },
     { label: 'Active Orders', value: activeOrders.toString(), icon: Clock, trend: '+4.1%', color: 'bg-orange-500' },
   ];
 
