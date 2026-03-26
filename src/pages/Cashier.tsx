@@ -11,7 +11,8 @@ import {
   serverTimestamp, 
   getDocs,
   Timestamp,
-  setDoc
+  setDoc,
+  increment
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
@@ -283,6 +284,63 @@ export default function Cashier() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
 
+  const printReceipt = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const receiptContent = document.getElementById('receipt-print')?.innerHTML;
+    if (!receiptContent) return;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Snaxy 26 - Receipt</title>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; width: 80mm; padding: 2mm; margin: 0; }
+            h2 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+            p { margin: 2px 0; font-size: 10px; }
+            .divider { border-top: 1px dashed black; margin: 10px 0; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 3px; font-size: 10px; }
+            .total { font-weight: bold; font-size: 14px; margin-top: 5px; }
+            .center { text-align: center; }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          ${receiptContent}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const printReport = () => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const reportContent = document.getElementById('report-print')?.innerHTML;
+    if (!reportContent) return;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Snaxy 26 - Daily Report</title>
+          <style>
+            body { font-family: 'Courier New', Courier, monospace; width: 80mm; padding: 5mm; margin: 0; }
+            h2 { text-align: center; margin-bottom: 5px; font-size: 18px; }
+            p { margin: 2px 0; font-size: 12px; }
+            .divider { border-top: 1px dashed black; margin: 10px 0; }
+            .row { display: flex; justify-content: space-between; margin-bottom: 3px; }
+            .total { font-weight: bold; font-size: 14px; margin-top: 5px; }
+          </style>
+        </head>
+        <body onload="window.print(); window.close();">
+          ${reportContent}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const handleConfirmPayment = async () => {
     if (!session || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total) {
       toast.error('Invalid payment details');
@@ -327,7 +385,7 @@ export default function Cashier() {
       // Auto-trigger print for thermal printer
       setTimeout(() => {
         if (document.getElementById('receipt-print')) {
-          window.print();
+          printReceipt();
         }
       }, 500);
     } catch (error) {
@@ -405,14 +463,15 @@ export default function Cashier() {
       
       await setDoc(reportRef, {
         date: today,
-        totalOrders: orders.filter(o => o.type === 'walk-in').length,
-        walkinSales: session.cashSales,
-        onlineSales: session.onlineSales,
-        totalExpenses: session.expenses,
-        cashExpected: session.expectedCash,
-        cashCounted: actualCash,
-        difference: difference,
-        generatedAt: serverTimestamp()
+        totalOrders: increment(orders.filter(o => o.type === 'walk-in' && o.status !== 'cancelled').length),
+        walkinSales: increment(session.cashSales),
+        onlineSales: increment(session.onlineSales),
+        totalExpenses: increment(session.expenses),
+        cashExpected: increment(session.expectedCash),
+        cashCounted: increment(actualCash),
+        difference: increment(difference),
+        generatedAt: serverTimestamp(),
+        sessions: increment(1)
       }, { merge: true });
 
       toast.success('Session closed and report generated');
@@ -959,7 +1018,16 @@ export default function Cashier() {
         {activeTab === 'report' && (
           <div className="flex-1 overflow-y-auto p-8 bg-neutral-50">
             <div className="max-w-4xl mx-auto space-y-8">
-              <h2 className="text-3xl font-black tracking-tight">END OF DAY REPORT</h2>
+              <div className="flex justify-between items-center">
+                <h2 className="text-3xl font-black tracking-tight uppercase">Session Report</h2>
+                <button 
+                  onClick={printReport}
+                  className="px-6 py-3 bg-white border border-neutral-200 rounded-2xl font-bold hover:bg-neutral-50 transition-all flex items-center gap-2 shadow-sm"
+                >
+                  <Printer className="w-5 h-5" />
+                  Print Report
+                </button>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
@@ -1002,6 +1070,23 @@ export default function Cashier() {
                   </div>
                 </div>
               </div>
+
+              {expenses.length > 0 && (
+                <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-neutral-400">Expense Details</h3>
+                  <div className="divide-y divide-neutral-100">
+                    {expenses.map((expense) => (
+                      <div key={expense.id} className="py-4 flex justify-between items-center">
+                        <div>
+                          <p className="font-bold text-neutral-900 uppercase text-sm">{expense.type}</p>
+                          <p className="text-xs text-neutral-400 font-medium">{expense.note}</p>
+                        </div>
+                        <span className="font-black text-red-600">-{formatCurrency(expense.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="bg-orange-600 p-8 rounded-[3rem] text-white space-y-6">
                 <div className="flex justify-between items-center">
@@ -1084,7 +1169,7 @@ export default function Cashier() {
                   Close
                 </button>
                 <button 
-                  onClick={() => window.print()}
+                  onClick={() => printReceipt()}
                   className="flex-1 py-4 bg-orange-600 text-white rounded-2xl font-bold hover:bg-orange-700 transition-all flex items-center justify-center gap-2"
                 >
                   <Printer className="w-5 h-5" />
@@ -1118,19 +1203,19 @@ export default function Cashier() {
           <div style={{ marginBottom: '10px' }}>
             {lastOrder.items.map((item, idx) => (
               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                <span style={{ flex: 1 }}>{item.quantity}x {item.name}</span>
-                <span>{formatCurrency(item.price * item.quantity)}</span>
+                <span style={{ flex: 1, fontSize: '10px' }}>{item.quantity}x {item.name}</span>
+                <span style={{ fontSize: '10px' }}>{formatCurrency(item.price * item.quantity)}</span>
               </div>
             ))}
           </div>
 
           <div style={{ borderTop: '1px dashed black', paddingTop: '5px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
               <span>Subtotal:</span>
               <span>{formatCurrency(lastOrder.subtotal)}</span>
             </div>
             {lastOrder.discount > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
                 <span>Discount:</span>
                 <span>-{formatCurrency(lastOrder.discount)}</span>
               </div>
@@ -1158,6 +1243,70 @@ export default function Cashier() {
           </div>
         </div>
       )}
+
+      {/* Hidden Report for Printing */}
+      <div id="report-print" className="hidden">
+        <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>SNAXY 26</h2>
+          <p style={{ margin: '2px 0', fontSize: '10px' }}>SESSION REPORT</p>
+          <p style={{ margin: '2px 0', fontSize: '10px' }}>{new Date().toLocaleString()}</p>
+        </div>
+        
+        <div className="divider" style={{ borderTop: '1px dashed black', margin: '10px 0' }}></div>
+        
+        <p>Cashier: {session?.cashierName}</p>
+        <p>Start: {session?.startTime?.toDate?.().toLocaleString() || new Date().toLocaleString()}</p>
+        
+        <div className="divider" style={{ borderTop: '1px dashed black', margin: '10px 0' }}></div>
+        
+        <div className="row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Walk-in Sales:</span>
+          <span>{formatCurrency(session?.cashSales || 0)}</span>
+        </div>
+        <div className="row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Online Sales:</span>
+          <span>{formatCurrency(session?.onlineSales || 0)}</span>
+        </div>
+        <div className="row" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+          <span>Total Sales:</span>
+          <span>{formatCurrency((session?.cashSales || 0) + (session?.onlineSales || 0))}</span>
+        </div>
+        
+        <div className="divider" style={{ borderTop: '1px dashed black', margin: '10px 0' }}></div>
+        
+        <div className="row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Opening Balance:</span>
+          <span>{formatCurrency(session?.openingBalance || 0)}</span>
+        </div>
+        <div className="row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Cash Sales (+):</span>
+          <span>{formatCurrency(session?.cashSales || 0)}</span>
+        </div>
+        <div className="row" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>Expenses (-):</span>
+          <span>{formatCurrency(session?.expenses || 0)}</span>
+        </div>
+        <div className="row" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+          <span>Expected Cash:</span>
+          <span>{formatCurrency(session?.expectedCash || 0)}</span>
+        </div>
+
+        {expenses.length > 0 && (
+          <>
+            <div className="divider" style={{ borderTop: '1px dashed black', margin: '10px 0' }}></div>
+            <p style={{ fontWeight: 'bold' }}>EXPENSES:</p>
+            {expenses.map(e => (
+              <div key={e.id} className="row" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                <span>{e.type}: {e.note}</span>
+                <span>{formatCurrency(e.amount)}</span>
+              </div>
+            ))}
+          </>
+        )}
+        
+        <div className="divider" style={{ borderTop: '1px dashed black', margin: '10px 0' }}></div>
+        <p style={{ textAlign: 'center', fontSize: '10px' }}>End of Session Report</p>
+      </div>
 
       {/* Close Session Modal */}
       <AnimatePresence>

@@ -108,7 +108,7 @@ export default function App() {
                     </ProtectedRoute>
                   } />
                 </Routes>
-                <Toaster position="top-center" />
+                <Toaster position="top-right" />
               </NotificationProvider>
             </Router>
         </CartProvider>

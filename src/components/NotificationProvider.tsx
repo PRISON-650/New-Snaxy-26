@@ -38,9 +38,10 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 
 const AdminNotification = ({ order, t, onClick }: { order: Order; t: any; onClick: () => void }) => (
   <motion.div
-    initial={{ opacity: 0, y: 50, scale: 0.9 }}
+    initial={{ opacity: 0, y: 20, scale: 0.95 }}
     animate={{ opacity: 1, y: 0, scale: 1 }}
-    exit={{ opacity: 0, scale: 0.9 }}
+    exit={{ opacity: 0, scale: 0.95 }}
+    transition={{ duration: 0.2 }}
     className="bg-neutral-900 text-white p-1 rounded-[2.5rem] shadow-2xl border border-white/10 overflow-hidden max-w-md w-full"
   >
     <div className="bg-orange-600 p-8 rounded-[2.2rem] flex items-center gap-6 relative overflow-hidden">
@@ -93,9 +94,10 @@ const CustomerNotification = ({ order, t }: { order: Order; t: any }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 50 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 50 }}
+      initial={{ opacity: 0, x: 20, scale: 0.95 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 20, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
       className="bg-white p-2 rounded-[2.5rem] shadow-2xl border border-neutral-100 flex items-center gap-5 max-w-sm w-full group"
     >
       <div className={cn("w-16 h-16 rounded-[1.8rem] flex items-center justify-center flex-shrink-0 text-white shadow-lg transition-transform group-hover:scale-105", color)}>

@@ -22,16 +22,16 @@
 @media print {
   /* Hide everything by default */
   body * {
-    display: none !important;
+    visibility: hidden !important;
   }
   
   /* Show only the receipt and its children */
   #receipt-print, #receipt-print * {
-    display: block !important;
+    visibility: visible !important;
   }
 
   #receipt-print {
-    display: block !important;
+    visibility: visible !important;
     position: absolute;
     left: 0;
     top: 0;
