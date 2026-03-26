@@ -12,7 +12,8 @@ import {
   getDocs,
   Timestamp,
   setDoc,
-  increment
+  increment,
+  limit
 } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
@@ -48,7 +49,8 @@ import {
   FileText,
   AlertCircle,
   Banknote,
-  ChevronLeft
+  ChevronLeft,
+  Calendar
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
@@ -284,6 +286,36 @@ export default function Cashier() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
 
+  const [dailyReport, setDailyReport] = useState<DailyReport | null>(null);
+  const [reportHistory, setReportHistory] = useState<DailyReport[]>([]);
+  const [selectedHistoryDate, setSelectedHistoryDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+
+  // Fetch Daily Report for Today
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const unsub = onSnapshot(doc(db, 'dailyReports', today), (doc) => {
+      if (doc.exists()) {
+        setDailyReport({ id: doc.id, ...doc.data() } as DailyReport);
+      } else {
+        setDailyReport(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Fetch History
+  useEffect(() => {
+    if (activeTab !== 'report') return;
+    setIsHistoryLoading(true);
+    const q = query(collection(db, 'dailyReports'), orderBy('date', 'desc'), limit(30));
+    const unsub = onSnapshot(q, (snapshot) => {
+      setReportHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyReport)));
+      setIsHistoryLoading(false);
+    });
+    return () => unsub();
+  }, [activeTab]);
+
   const printReceipt = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -341,7 +373,7 @@ export default function Cashier() {
     printWindow.document.close();
   };
 
-  const handleConfirmPayment = async () => {
+  const handleConfirmPayment = async (shouldPrint: boolean = false) => {
     if (!session || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total) {
       toast.error('Invalid payment details');
       return;
@@ -382,12 +414,13 @@ export default function Cashier() {
       setCashReceived('');
       setIsReceiptModalOpen(true);
       
-      // Auto-trigger print for thermal printer
-      setTimeout(() => {
-        if (document.getElementById('receipt-print')) {
-          printReceipt();
-        }
-      }, 500);
+      if (shouldPrint) {
+        setTimeout(() => {
+          if (document.getElementById('receipt-print')) {
+            printReceipt();
+          }
+        }, 500);
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'orders');
     } finally {
@@ -786,14 +819,23 @@ export default function Cashier() {
                     </div>
                   )}
 
-                  <button 
-                    onClick={handleConfirmPayment}
-                    disabled={isProcessingPayment || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total}
-                    className="w-full py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isProcessingPayment ? 'Processing...' : 'Confirm Payment & Print'}
-                    <Printer className="w-5 h-5" />
-                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => handleConfirmPayment(false)}
+                      disabled={isProcessingPayment || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total}
+                      className="py-4 bg-neutral-100 text-neutral-900 rounded-2xl font-bold hover:bg-neutral-200 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isProcessingPayment ? '...' : 'Confirm'}
+                    </button>
+                    <button 
+                      onClick={() => handleConfirmPayment(true)}
+                      disabled={isProcessingPayment || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total}
+                      className="py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isProcessingPayment ? '...' : 'Confirm & Print'}
+                      <Printer className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1019,74 +1061,172 @@ export default function Cashier() {
           <div className="flex-1 overflow-y-auto p-8 bg-neutral-50">
             <div className="max-w-4xl mx-auto space-y-8">
               <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-black tracking-tight uppercase">Session Report</h2>
-                <button 
-                  onClick={printReport}
-                  className="px-6 py-3 bg-white border border-neutral-200 rounded-2xl font-bold hover:bg-neutral-50 transition-all flex items-center gap-2 shadow-sm"
-                >
-                  <Printer className="w-5 h-5" />
-                  Print Report
-                </button>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-neutral-400">Sales Summary</h3>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-500 font-bold">Walk-in Sales (Cash)</span>
-                      <span className="font-black text-lg">{formatCurrency(session.cashSales)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-500 font-bold">Online Sales (Prepaid)</span>
-                      <span className="font-black text-lg">{formatCurrency(session.onlineSales)}</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-4 border-t border-neutral-100">
-                      <span className="text-neutral-900 font-black">Total Sales</span>
-                      <span className="font-black text-2xl text-orange-600">{formatCurrency(session.cashSales + session.onlineSales)}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-neutral-400">Cash Reconciliation</h3>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-500 font-bold">Opening Balance</span>
-                      <span className="font-black text-lg">{formatCurrency(session.openingBalance)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-500 font-bold">Cash Sales (+)</span>
-                      <span className="font-black text-lg text-green-600">+{formatCurrency(session.cashSales)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-neutral-500 font-bold">Expenses (-)</span>
-                      <span className="font-black text-lg text-red-600">-{formatCurrency(session.expenses)}</span>
-                    </div>
-                    <div className="flex justify-between items-center pt-4 border-t border-neutral-100">
-                      <span className="text-neutral-900 font-black">Expected Cash</span>
-                      <span className="font-black text-2xl text-neutral-900">{formatCurrency(session.expectedCash)}</span>
-                    </div>
-                  </div>
+                <h2 className="text-3xl font-black tracking-tight uppercase">Reports & History</h2>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={printReport}
+                    className="px-6 py-3 bg-white border border-neutral-200 rounded-2xl font-bold hover:bg-neutral-50 transition-all flex items-center gap-2 shadow-sm"
+                  >
+                    <Printer className="w-5 h-5" />
+                    Print Session
+                  </button>
                 </div>
               </div>
 
-              {expenses.length > 0 && (
-                <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-neutral-400">Expense Details</h3>
-                  <div className="divide-y divide-neutral-100">
-                    {expenses.map((expense) => (
-                      <div key={expense.id} className="py-4 flex justify-between items-center">
-                        <div>
-                          <p className="font-bold text-neutral-900 uppercase text-sm">{expense.type}</p>
-                          <p className="text-xs text-neutral-400 font-medium">{expense.note}</p>
-                        </div>
-                        <span className="font-black text-red-600">-{formatCurrency(expense.amount)}</span>
+              {/* Current Session Summary */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-px flex-1 bg-neutral-200" />
+                  <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400">Current Session</span>
+                  <div className="h-px flex-1 bg-neutral-200" />
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-neutral-400">Session Sales</h3>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-500 font-bold">Walk-in (Cash)</span>
+                        <span className="font-black text-lg">{formatCurrency(session.cashSales)}</span>
                       </div>
-                    ))}
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-500 font-bold">Online (Prepaid)</span>
+                        <span className="font-black text-lg">{formatCurrency(session.onlineSales)}</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-4 border-t border-neutral-100">
+                        <span className="text-neutral-900 font-black">Session Total</span>
+                        <span className="font-black text-2xl text-orange-600">{formatCurrency(session.cashSales + session.onlineSales)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-8 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-neutral-400">Session Cash</h3>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-500 font-bold">Opening</span>
+                        <span className="font-black text-lg">{formatCurrency(session.openingBalance)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-500 font-bold">Expenses (-)</span>
+                        <span className="font-black text-lg text-red-600">-{formatCurrency(session.expenses)}</span>
+                      </div>
+                      <div className="flex justify-between items-center pt-4 border-t border-neutral-100">
+                        <span className="text-neutral-900 font-black">Expected In Drawer</span>
+                        <span className="font-black text-2xl text-neutral-900">{formatCurrency(session.expectedCash)}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
+
+              {/* Daily, Monthly, Yearly Summaries */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Today's Sales</p>
+                  <p className="text-2xl font-black text-orange-600">
+                    {formatCurrency((dailyReport?.walkinSales || 0) + (dailyReport?.onlineSales || 0) + session.cashSales + session.onlineSales)}
+                  </p>
+                </div>
+                <div className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">This Month</p>
+                  <p className="text-2xl font-black text-neutral-900">
+                    {formatCurrency(reportHistory.filter(r => r.date.startsWith(new Date().toISOString().slice(0, 7))).reduce((acc, r) => acc + r.walkinSales + r.onlineSales, 0))}
+                  </p>
+                </div>
+                <div className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">This Year</p>
+                  <p className="text-2xl font-black text-neutral-900">
+                    {formatCurrency(reportHistory.filter(r => r.date.startsWith(new Date().getFullYear().toString())).reduce((acc, r) => acc + r.walkinSales + r.onlineSales, 0))}
+                  </p>
+                </div>
+              </div>
+
+              {/* Daily Totals (Aggregated) */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-px flex-1 bg-neutral-200" />
+                  <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400">Daily Totals (All Sessions)</span>
+                  <div className="h-px flex-1 bg-neutral-200" />
+                </div>
+
+                <div className="bg-neutral-900 text-white p-8 rounded-[3rem] shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-orange-600/20 rounded-full blur-3xl -mr-32 -mt-32" />
+                  <div className="relative grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="space-y-2">
+                      <p className="text-neutral-400 text-xs font-black uppercase tracking-widest">Total Daily Sales</p>
+                      <p className="text-4xl font-black text-orange-500">
+                        {formatCurrency((dailyReport?.walkinSales || 0) + (dailyReport?.onlineSales || 0) + session.cashSales + session.onlineSales)}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-neutral-400 text-xs font-black uppercase tracking-widest">Total Daily Expenses</p>
+                      <p className="text-4xl font-black text-red-400">
+                        {formatCurrency((dailyReport?.totalExpenses || 0) + session.expenses)}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-neutral-400 text-xs font-black uppercase tracking-widest">Total Sessions</p>
+                      <p className="text-4xl font-black text-white">
+                        {(dailyReport?.sessions || 0) + 1}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Historical Records */}
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-px flex-1 bg-neutral-200" />
+                  <span className="text-xs font-black uppercase tracking-[0.2em] text-neutral-400">Historical Records</span>
+                  <div className="h-px flex-1 bg-neutral-200" />
+                </div>
+
+                <div className="bg-white rounded-[2.5rem] border border-neutral-100 shadow-sm overflow-hidden">
+                  <div className="p-6 border-b border-neutral-100 bg-neutral-50/50 flex justify-between items-center">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-neutral-900">Past 30 Days</h3>
+                    <Calendar className="w-5 h-5 text-neutral-400" />
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="text-[10px] font-black uppercase tracking-widest text-neutral-400 border-b border-neutral-100">
+                          <th className="px-8 py-4">Date</th>
+                          <th className="px-8 py-4">Sales</th>
+                          <th className="px-8 py-4">Expenses</th>
+                          <th className="px-8 py-4">Cash Counted</th>
+                          <th className="px-8 py-4">Diff</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-neutral-50">
+                        {reportHistory.map((report) => (
+                          <tr key={report.id} className="hover:bg-neutral-50 transition-colors group">
+                            <td className="px-8 py-4 font-bold text-neutral-900">{report.date}</td>
+                            <td className="px-8 py-4 font-black text-orange-600">{formatCurrency(report.walkinSales + report.onlineSales)}</td>
+                            <td className="px-8 py-4 font-bold text-red-500">-{formatCurrency(report.totalExpenses)}</td>
+                            <td className="px-8 py-4 font-bold text-neutral-600">{formatCurrency(report.cashCounted)}</td>
+                            <td className={cn(
+                              "px-8 py-4 font-black",
+                              report.difference >= 0 ? "text-green-600" : "text-red-600"
+                            )}>
+                              {report.difference > 0 && '+'}
+                              {formatCurrency(report.difference)}
+                            </td>
+                          </tr>
+                        ))}
+                        {reportHistory.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-8 py-12 text-center text-neutral-400 font-bold">
+                              No historical records found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
 
               <div className="bg-orange-600 p-8 rounded-[3rem] text-white space-y-6">
                 <div className="flex justify-between items-center">

@@ -169,7 +169,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
                 }} 
               />
             ), {
-              duration: 15000,
+              duration: 4000,
               position: 'top-right',
             });
 
@@ -196,7 +196,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           const order = { id: change.doc.id, ...change.doc.data() } as Order;
           
           toast.custom((t) => <CustomerNotification order={order} t={t} />, {
-            duration: 8000,
+            duration: 3000,
             position: 'bottom-right',
           });
         }

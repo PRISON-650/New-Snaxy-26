@@ -108,7 +108,13 @@ export default function App() {
                     </ProtectedRoute>
                   } />
                 </Routes>
-                <Toaster position="top-right" />
+                <Toaster 
+                  position="top-right" 
+                  toastOptions={{
+                    duration: 3000,
+                    style: { marginTop: '80px' }
+                  }}
+                />
               </NotificationProvider>
             </Router>
         </CartProvider>

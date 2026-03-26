@@ -129,42 +129,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (e: any) {
         // If user not found in Auth, check Firestore for staff password
         if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-          const q = query(collection(db, 'users'), where('email', '==', email), where('password', '==', pass));
-          const querySnap = await getDocs(q);
+          const staffDocRef = doc(db, 'users', email.toLowerCase());
+          const staffSnap = await getDoc(staffDocRef);
           
-          if (!querySnap.empty) {
-            const staffDoc = querySnap.docs[0];
-            const staffData = staffDoc.data();
+          if (staffSnap.exists()) {
+            const staffData = staffSnap.data();
             
-            // Auto-register in Firebase Auth
-            try {
-              const userCred = await createUserWithEmailAndPassword(auth, email, pass);
-              const firebaseUser = userCred.user;
-              
-              // Update profile
-              await updateProfile(firebaseUser, { displayName: staffData.displayName });
-              
-              // Move data to the real UID
-              const newUser: User = {
-                uid: firebaseUser.uid,
-                email: email,
-                displayName: staffData.displayName,
-                photoURL: '',
-                role: staffData.role,
-                createdAt: new Date().toISOString(),
-              };
-              
-              await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
-              
-              // Delete the old "pending" staff document
-              await deleteDoc(staffDoc.ref);
-              
-              toast.success('Staff account activated and logged in!');
-              return;
-            } catch (regError: any) {
-              console.error('Auto-registration error:', regError);
-              // If user already exists in Auth but password was wrong, it will fail here too
-              throw new Error('Invalid email or password');
+            if (staffData.password === pass) {
+              // Auto-register in Firebase Auth
+              try {
+                const userCred = await createUserWithEmailAndPassword(auth, email, pass);
+                const firebaseUser = userCred.user;
+                
+                // Update profile
+                await updateProfile(firebaseUser, { displayName: staffData.displayName });
+                
+                // Move data to the real UID
+                const newUser: User = {
+                  uid: firebaseUser.uid,
+                  email: email,
+                  displayName: staffData.displayName,
+                  photoURL: '',
+                  role: staffData.role,
+                  createdAt: new Date().toISOString(),
+                };
+                
+                await setDoc(doc(db, 'users', firebaseUser.uid), newUser);
+                
+                // Delete the old "pending" staff document
+                await deleteDoc(staffSnap.ref);
+                
+                toast.success('Staff account activated and logged in!');
+                return;
+              } catch (regError: any) {
+                console.error('Auto-registration error:', regError);
+                throw new Error('Invalid email or password');
+              }
             }
           }
         }

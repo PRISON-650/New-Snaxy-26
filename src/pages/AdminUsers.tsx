@@ -56,7 +56,7 @@ export default function AdminUsers() {
 
       // We store the password in Firestore for staff login
       // In a real app, this should be handled by Firebase Admin SDK or a Cloud Function
-      const userRef = doc(collection(db, 'users'));
+      const userRef = doc(db, 'users', newUser.email.toLowerCase());
       await setDoc(userRef, {
         email: newUser.email,
         displayName: newUser.displayName,

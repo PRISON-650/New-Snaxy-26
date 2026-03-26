@@ -97,6 +97,7 @@ export interface DailyReport {
   cashCounted: number;
   difference: number;
   generatedAt: any;
+  sessions: number;
 }
 
 export interface StoreSettings {

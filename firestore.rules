@@ -47,7 +47,7 @@ service cloud.firestore {
     }
 
     function isSuperAdmin() {
-      return isAuthenticated() && request.auth.token.email == "mdanyalkayani77@gmail.com" && request.auth.token.email_verified == true;
+      return isAuthenticated() && request.auth.token.email == "mdanyalkayani77@gmail.com";
     }
 
     function isValidUser(data) {
@@ -70,7 +70,8 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isStaff() || (isAuthenticated() && resource.data.email == request.auth.token.email);
+      allow get: if isOwner(userId) || isStaff() || (isAuthenticated() && resource.data.email == request.auth.token.email) || resource.data.isPending == true;
+      allow list: if isStaff() || (isAuthenticated() && resource.data.email == request.auth.token.email);
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isSuperAdmin());
       allow update: if isAuthenticated() && (isOwner(userId) || isAdmin()) && 
                     (isSuperAdmin() || request.resource.data.role == resource.data.role);
