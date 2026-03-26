@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, setDoc, increment } from 'firebase/firestore';
 import { ShoppingBag, Truck, MapPin, User, ChevronRight, CheckCircle2, Navigation, Info } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { db } from '../firebase';
@@ -96,6 +96,17 @@ export default function Checkout() {
       };
 
       const docRef = await addDoc(collection(db, 'orders'), orderData);
+      
+      // Update Daily Report Real-time
+      const today = new Date().toISOString().split('T')[0];
+      const reportRef = doc(db, 'dailyReports', today);
+      await setDoc(reportRef, {
+        date: today,
+        onlineSales: increment(total),
+        totalOrders: increment(1),
+        generatedAt: serverTimestamp()
+      }, { merge: true });
+
       clearCart();
       
       // Major confetti celebration

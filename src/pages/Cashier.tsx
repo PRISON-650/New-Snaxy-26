@@ -408,6 +408,17 @@ export default function Cashier() {
           cashSales: increment(total),
           expectedCash: increment(total)
         });
+
+        // Update Daily Report Real-time
+        const today = new Date().toISOString().split('T')[0];
+        const reportRef = doc(db, 'dailyReports', today);
+        await setDoc(reportRef, {
+          date: today,
+          walkinSales: increment(total),
+          cashExpected: increment(total),
+          totalOrders: increment(1),
+          generatedAt: serverTimestamp()
+        }, { merge: true });
       }
 
       toast.success(`Order #${orderRef.id.slice(-6)} sent to kitchen`);
@@ -460,6 +471,16 @@ export default function Cashier() {
           expenses: increment(parseFloat(newExpense.amount)),
           expectedCash: increment(-parseFloat(newExpense.amount))
         });
+
+        // Update Daily Report Real-time
+        const today = new Date().toISOString().split('T')[0];
+        const reportRef = doc(db, 'dailyReports', today);
+        await setDoc(reportRef, {
+          date: today,
+          totalExpenses: increment(parseFloat(newExpense.amount)),
+          cashExpected: increment(-parseFloat(newExpense.amount)),
+          generatedAt: serverTimestamp()
+        }, { merge: true });
       }
 
       setNewExpense({ type: '', amount: '', note: '' });
@@ -492,17 +513,12 @@ export default function Cashier() {
         status: 'closed'
       });
 
-      // Generate Daily Report
+      // Update Daily Report with session-end data
       const today = new Date().toISOString().split('T')[0];
       const reportRef = doc(db, 'dailyReports', today);
       
       await setDoc(reportRef, {
         date: today,
-        totalOrders: increment(orders.filter(o => o.sessionId === session.id && o.type === 'walk-in' && o.status !== 'cancelled').length),
-        walkinSales: increment(session.cashSales),
-        onlineSales: increment(session.onlineSales),
-        totalExpenses: increment(session.expenses),
-        cashExpected: increment(session.expectedCash),
         cashCounted: increment(actualCash),
         difference: increment(difference),
         generatedAt: serverTimestamp(),
@@ -793,21 +809,6 @@ export default function Cashier() {
                       className="w-20 text-right bg-transparent border-b border-neutral-300 focus:border-orange-500 outline-none"
                     />
                   </div>
-                  <div className="flex justify-between items-center text-sm font-bold text-neutral-500">
-                    <span>Auto-print Receipt</span>
-                    <button 
-                      onClick={() => setAutoPrint(!autoPrint)}
-                      className={cn(
-                        "w-12 h-6 rounded-full transition-all relative",
-                        autoPrint ? "bg-orange-600" : "bg-neutral-200"
-                      )}
-                    >
-                      <div className={cn(
-                        "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                        autoPrint ? "right-1" : "left-1"
-                      )} />
-                    </button>
-                  </div>
                   <div className="flex justify-between text-xl font-black pt-2 border-t border-neutral-200">
                     <span>Total</span>
                     <span className="text-orange-600">{formatCurrency(total)}</span>
@@ -838,12 +839,19 @@ export default function Cashier() {
 
                   <div className="grid grid-cols-1 gap-3">
                     <button 
-                      onClick={() => handleConfirmPayment(autoPrint)}
+                      onClick={() => handleConfirmPayment(false)}
                       disabled={isProcessingPayment || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total}
                       className="py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isProcessingPayment ? '...' : 'Confirm Order'}
-                      {autoPrint && <Printer className="w-4 h-4" />}
+                    </button>
+                    <button 
+                      onClick={() => handleConfirmPayment(true)}
+                      disabled={isProcessingPayment || cart.length === 0 || !cashReceived || parseFloat(cashReceived) < total}
+                      className="py-4 bg-orange-600 text-white rounded-2xl font-bold hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      <Printer className="w-4 h-4" />
+                      Confirm & Print
                     </button>
                   </div>
                 </div>
@@ -1135,7 +1143,7 @@ export default function Cashier() {
                 <div className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm space-y-2">
                   <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Today's Sales</p>
                   <p className="text-2xl font-black text-orange-600">
-                    {formatCurrency((dailyReport?.walkinSales || 0) + (dailyReport?.onlineSales || 0) + session.cashSales + session.onlineSales)}
+                    {formatCurrency((dailyReport?.walkinSales || 0) + (dailyReport?.onlineSales || 0))}
                   </p>
                 </div>
                 <div className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm space-y-2">
@@ -1166,19 +1174,19 @@ export default function Cashier() {
                     <div className="space-y-2">
                       <p className="text-neutral-400 text-xs font-black uppercase tracking-widest">Total Daily Sales</p>
                       <p className="text-4xl font-black text-orange-500">
-                        {formatCurrency((dailyReport?.walkinSales || 0) + (dailyReport?.onlineSales || 0) + session.cashSales + session.onlineSales)}
+                        {formatCurrency((dailyReport?.walkinSales || 0) + (dailyReport?.onlineSales || 0))}
                       </p>
                     </div>
                     <div className="space-y-2">
                       <p className="text-neutral-400 text-xs font-black uppercase tracking-widest">Total Daily Expenses</p>
                       <p className="text-4xl font-black text-red-400">
-                        {formatCurrency((dailyReport?.totalExpenses || 0) + session.expenses)}
+                        {formatCurrency(dailyReport?.totalExpenses || 0)}
                       </p>
                     </div>
                     <div className="space-y-2">
                       <p className="text-neutral-400 text-xs font-black uppercase tracking-widest">Total Sessions</p>
                       <p className="text-4xl font-black text-white">
-                        {(dailyReport?.sessions || 0) + 1}
+                        {dailyReport?.sessions || 0}
                       </p>
                     </div>
                   </div>

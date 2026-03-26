@@ -134,29 +134,29 @@ export default function AdminReports() {
           <div class="summary-grid">
             <div class="summary-item">
               <div class="summary-label">Total Sales</div>
-              <div class="summary-value">${formatCurrency(selectedReport.walkinSales + selectedReport.onlineSales)}</div>
+              <div class="summary-value">${formatCurrency((selectedReport.walkinSales || 0) + (selectedReport.onlineSales || 0))}</div>
             </div>
             <div class="summary-item">
               <div class="summary-label">Total Expenses</div>
-              <div class="summary-value text-red">-${formatCurrency(selectedReport.totalExpenses)}</div>
+              <div class="summary-value text-red">-${formatCurrency(selectedReport.totalExpenses || 0)}</div>
             </div>
             <div class="summary-item">
               <div class="summary-label">Cash Expected</div>
-              <div class="summary-value">${formatCurrency(selectedReport.cashExpected)}</div>
+              <div class="summary-value">${formatCurrency(selectedReport.cashExpected || 0)}</div>
             </div>
             <div class="summary-item">
               <div class="summary-label">Cash Counted</div>
-              <div class="summary-value">${formatCurrency(selectedReport.cashCounted)}</div>
+              <div class="summary-value">${formatCurrency(selectedReport.cashCounted || 0)}</div>
             </div>
             <div class="summary-item">
               <div class="summary-label">Difference</div>
-              <div class="summary-value ${selectedReport.difference >= 0 ? 'text-green' : 'text-red'}">
-                ${selectedReport.difference > 0 ? '+' : ''}${formatCurrency(selectedReport.difference)}
+              <div class="summary-value ${(selectedReport.difference || 0) >= 0 ? 'text-green' : 'text-red'}">
+                ${(selectedReport.difference || 0) > 0 ? '+' : ''}${formatCurrency(selectedReport.difference || 0)}
               </div>
             </div>
             <div class="summary-item">
               <div class="summary-label">Total Orders</div>
-              <div class="summary-value">${selectedReport.totalOrders}</div>
+              <div class="summary-value">${selectedReport.totalOrders || 0}</div>
             </div>
           </div>
 
@@ -282,25 +282,25 @@ export default function AdminReports() {
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t border-neutral-50">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Sales</p>
-                        <p className="font-black text-orange-600">{formatCurrency(report.walkinSales + report.onlineSales)}</p>
+                        <p className="font-black text-orange-600">{formatCurrency((report.walkinSales || 0) + (report.onlineSales || 0))}</p>
                       </div>
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-neutral-400">Expenses</p>
-                        <p className="font-black text-red-500">-{formatCurrency(report.totalExpenses)}</p>
+                        <p className="font-black text-red-500">-{formatCurrency(report.totalExpenses || 0)}</p>
                       </div>
                     </div>
 
                     <div className={cn(
                       "p-3 rounded-xl flex justify-between items-center",
-                      report.difference >= 0 ? "bg-green-50" : "bg-red-50"
+                      (report.difference || 0) >= 0 ? "bg-green-50" : "bg-red-50"
                     )}>
                       <span className="text-[10px] font-black uppercase tracking-widest text-neutral-500">Difference</span>
                       <span className={cn(
                         "font-black text-sm",
-                        report.difference >= 0 ? "text-green-600" : "text-red-600"
+                        (report.difference || 0) >= 0 ? "text-green-600" : "text-red-600"
                       )}>
-                        {report.difference > 0 && '+'}
-                        {formatCurrency(report.difference)}
+                        {(report.difference || 0) > 0 && '+'}
+                        {formatCurrency(report.difference || 0)}
                       </span>
                     </div>
                   </div>
@@ -349,10 +349,10 @@ export default function AdminReports() {
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {[
-                    { label: 'Total Sales', value: formatCurrency(selectedReport.walkinSales + selectedReport.onlineSales), icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50' },
-                    { label: 'Total Expenses', value: formatCurrency(selectedReport.totalExpenses), icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
-                    { label: 'Net Cash', value: formatCurrency(selectedReport.cashExpected), icon: Banknote, color: 'text-neutral-900', bg: 'bg-neutral-50' },
-                    { label: 'Total Orders', value: selectedReport.totalOrders.toString(), icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-50' },
+                    { label: 'Total Sales', value: formatCurrency((selectedReport.walkinSales || 0) + (selectedReport.onlineSales || 0)), icon: TrendingUp, color: 'text-orange-600', bg: 'bg-orange-50' },
+                    { label: 'Total Expenses', value: formatCurrency(selectedReport.totalExpenses || 0), icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
+                    { label: 'Net Cash', value: formatCurrency(selectedReport.cashExpected || 0), icon: Banknote, color: 'text-neutral-900', bg: 'bg-neutral-50' },
+                    { label: 'Total Orders', value: (selectedReport.totalOrders || 0).toString(), icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-50' },
                   ].map((stat, idx) => (
                     <div key={idx} className="bg-white p-6 rounded-[2rem] border border-neutral-100 shadow-sm space-y-4">
                       <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", stat.bg)}>
