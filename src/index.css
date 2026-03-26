@@ -19,3 +19,45 @@
   scrollbar-width: none;
 }
 
+@media print {
+  /* Hide everything by default */
+  body * {
+    display: none !important;
+  }
+  
+  /* Show only the receipt and its children */
+  #receipt-print, #receipt-print * {
+    display: block !important;
+  }
+
+  #receipt-print {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm; /* Standard thermal printer width */
+    padding: 2mm;
+    background: white;
+    color: black;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  /* Reset some styles that might interfere */
+  #receipt-print h2 {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+
+  #receipt-print p {
+    margin: 2px 0;
+  }
+
+  @page {
+    margin: 0;
+    size: auto;
+  }
+}
+

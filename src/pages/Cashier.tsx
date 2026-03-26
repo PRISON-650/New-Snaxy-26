@@ -26,6 +26,7 @@ import {
   DailyReport
 } from '../types';
 import { formatCurrency, cn } from '../lib/utils';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   Search, 
   Plus, 
@@ -45,13 +46,15 @@ import {
   PlusCircle,
   FileText,
   AlertCircle,
-  Banknote
+  Banknote,
+  ChevronLeft
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function Cashier() {
   const { user, isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [session, setSession] = useState<CashRegisterSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   const [openingBalance, setOpeningBalance] = useState('');
@@ -74,6 +77,10 @@ export default function Cashier() {
   const [newExpense, setNewExpense] = useState({ type: '', amount: '', note: '' });
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [isClosingModalOpen, setIsClosingModalOpen] = useState(false);
+  const [closingCash, setClosingCash] = useState('');
+  const [isClosingSession, setIsClosingSession] = useState(false);
 
   // Fetch Session
   useEffect(() => {
@@ -301,17 +308,26 @@ export default function Cashier() {
       setLastOrder(finalOrder);
       
       // Update Session Stats
-      const sessionRef = doc(db, 'cashRegisterSessions', session.id);
-      await updateDoc(sessionRef, {
-        cashSales: session.cashSales + total,
-        expectedCash: session.expectedCash + total
-      });
+      if (session.id !== 'admin-bypass') {
+        const sessionRef = doc(db, 'cashRegisterSessions', session.id);
+        await updateDoc(sessionRef, {
+          cashSales: session.cashSales + total,
+          expectedCash: session.expectedCash + total
+        });
+      }
 
       toast.success(`Order #${orderRef.id.slice(-6)} sent to kitchen`);
       setCart([]);
       setDiscount(0);
       setCashReceived('');
       setIsReceiptModalOpen(true);
+      
+      // Auto-trigger print for thermal printer
+      setTimeout(() => {
+        if (document.getElementById('receipt-print')) {
+          window.print();
+        }
+      }, 500);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'orders');
     } finally {
@@ -343,11 +359,13 @@ export default function Cashier() {
       await addDoc(collection(db, 'expenses'), expenseData);
       
       // Update session
-      const sessionRef = doc(db, 'cashRegisterSessions', session.id);
-      await updateDoc(sessionRef, {
-        expenses: session.expenses + parseFloat(newExpense.amount),
-        expectedCash: session.expectedCash - parseFloat(newExpense.amount)
-      });
+      if (session.id !== 'admin-bypass') {
+        const sessionRef = doc(db, 'cashRegisterSessions', session.id);
+        await updateDoc(sessionRef, {
+          expenses: session.expenses + parseFloat(newExpense.amount),
+          expectedCash: session.expectedCash - parseFloat(newExpense.amount)
+        });
+      }
 
       setNewExpense({ type: '', amount: '', note: '' });
       toast.success('Expense recorded');
@@ -360,6 +378,15 @@ export default function Cashier() {
 
   const handleCloseSession = async (actualCash: number) => {
     if (!session) return;
+    
+    if (session.id === 'admin-bypass') {
+      setSession(null);
+      setIsClosingModalOpen(false);
+      navigate('/admin');
+      return;
+    }
+
+    setIsClosingSession(true);
     try {
       const difference = actualCash - session.expectedCash;
       const sessionRef = doc(db, 'cashRegisterSessions', session.id);
@@ -374,11 +401,9 @@ export default function Cashier() {
       const today = new Date().toISOString().split('T')[0];
       const reportRef = doc(db, 'dailyReports', today);
       
-      // In a real app, you'd aggregate all sessions for the day
-      // For now, we'll just create/update based on this session
       await setDoc(reportRef, {
         date: today,
-        totalOrders: orders.filter(o => o.type === 'walk-in').length, // Simplified
+        totalOrders: orders.filter(o => o.type === 'walk-in').length,
         walkinSales: session.cashSales,
         onlineSales: session.onlineSales,
         totalExpenses: session.expenses,
@@ -389,8 +414,12 @@ export default function Cashier() {
       }, { merge: true });
 
       toast.success('Session closed and report generated');
+      setIsClosingModalOpen(false);
+      setSession(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'cashRegisterSessions');
+    } finally {
+      setIsClosingSession(false);
     }
   };
 
@@ -526,14 +555,26 @@ export default function Cashier() {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          {(isAdmin || isSuperAdmin) && (
+            <button 
+              onClick={() => navigate('/admin')}
+              className="px-4 py-2 text-neutral-500 hover:bg-neutral-100 rounded-xl font-bold flex items-center gap-2 transition-all"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Exit to Admin
+            </button>
+          )}
           <div className="text-right">
             <p className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Cashier</p>
             <p className="font-bold">{session.cashierName}</p>
           </div>
           <button 
             onClick={() => {
-              const amount = prompt('Enter actual cash in drawer:');
-              if (amount !== null) handleCloseSession(parseFloat(amount));
+              if (isAdmin || isSuperAdmin) {
+                navigate('/admin');
+              } else {
+                setIsClosingModalOpen(true);
+              }
             }}
             className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors"
           >
@@ -967,10 +1008,7 @@ export default function Cashier() {
                     <p className="text-2xl font-bold">Complete your shift and generate report.</p>
                   </div>
                   <button 
-                    onClick={() => {
-                      const amount = prompt('Enter actual cash in drawer:');
-                      if (amount !== null) handleCloseSession(parseFloat(amount));
-                    }}
+                    onClick={() => setIsClosingModalOpen(true)}
                     className="px-8 py-4 bg-white text-orange-600 rounded-2xl font-black uppercase tracking-widest hover:bg-neutral-100 transition-all"
                   >
                     Close Register
@@ -1050,6 +1088,139 @@ export default function Cashier() {
                   <Printer className="w-5 h-5" />
                   Print
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Hidden Thermal Receipt for Printing */}
+      {lastOrder && (
+        <div id="receipt-print" className="hidden">
+          <div style={{ textAlign: 'center', marginBottom: '10px' }}>
+            <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>SNAXY 26</h2>
+            <p style={{ margin: '2px 0', fontSize: '10px' }}>Red Town, Dhoke Ratta, Rawalpindi</p>
+            <p style={{ margin: '2px 0', fontSize: '10px' }}>+92 332 6750700</p>
+          </div>
+          
+          <div style={{ borderTop: '1px dashed black', borderBottom: '1px dashed black', padding: '5px 0', margin: '10px 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+              <span>Order: #{lastOrder.id.slice(-6).toUpperCase()}</span>
+              <span>{new Date().toLocaleDateString()}</span>
+            </div>
+            <div style={{ fontSize: '10px' }}>
+              <span>Cashier: {session.cashierName}</span>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '10px' }}>
+            {lastOrder.items.map((item, idx) => (
+              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                <span style={{ flex: 1 }}>{item.quantity}x {item.name}</span>
+                <span>{formatCurrency(item.price * item.quantity)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ borderTop: '1px dashed black', paddingTop: '5px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Subtotal:</span>
+              <span>{formatCurrency(lastOrder.subtotal)}</span>
+            </div>
+            {lastOrder.discount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Discount:</span>
+                <span>-{formatCurrency(lastOrder.discount)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '14px', marginTop: '5px' }}>
+              <span>TOTAL:</span>
+              <span>{formatCurrency(lastOrder.total)}</span>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '10px', fontSize: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Cash Received:</span>
+              <span>{formatCurrency(lastOrder.cashReceived || 0)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span>Change:</span>
+              <span>{formatCurrency(lastOrder.changeAmount || 0)}</span>
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '10px' }}>
+            <p>Thank you for choosing Snaxy 26!</p>
+            <p>Enjoy your meal!</p>
+          </div>
+        </div>
+      )}
+
+      {/* Close Session Modal */}
+      <AnimatePresence>
+        {isClosingModalOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white p-8 rounded-[2.5rem] shadow-2xl border border-neutral-100 max-w-md w-full space-y-6"
+            >
+              <div className="flex justify-between items-center">
+                <h3 className="text-2xl font-black tracking-tight">CLOSE REGISTER</h3>
+                <button onClick={() => setIsClosingModalOpen(false)} className="p-2 hover:bg-neutral-100 rounded-xl"><X className="w-6 h-6" /></button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-neutral-50 rounded-2xl space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-500">Expected Cash:</span>
+                    <span className="font-bold">{formatCurrency(session.expectedCash)}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-neutral-400 ml-1">Actual Cash in Drawer</label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-neutral-400">PKR</div>
+                    <input 
+                      type="number"
+                      value={closingCash}
+                      onChange={(e) => setClosingCash(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full pl-14 pr-4 py-4 bg-neutral-50 border border-neutral-100 rounded-2xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-lg"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setIsClosingModalOpen(false)}
+                    className="flex-1 py-4 bg-neutral-100 text-neutral-600 rounded-2xl font-bold hover:bg-neutral-200 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={() => handleCloseSession(parseFloat(closingCash) || 0)}
+                    disabled={isClosingSession || !closingCash}
+                    className="flex-[2] py-4 bg-red-600 text-white rounded-2xl font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isClosingSession ? 'Closing...' : 'Close & Logout'}
+                    <LogOut className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                {(isAdmin || isSuperAdmin) && (
+                  <div className="pt-4 border-t border-neutral-100">
+                    <button 
+                      onClick={() => navigate('/admin')}
+                      className="w-full py-3 text-neutral-400 font-bold hover:text-neutral-600 transition-colors text-xs uppercase tracking-widest"
+                    >
+                      Admin: Exit without closing session
+                    </button>
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>

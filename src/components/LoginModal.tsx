@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Mail, Lock, LogIn, Chrome } from 'lucide-react';
 import { useAuth } from '../AuthContext';
@@ -10,18 +10,24 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
-  const { login, loginWithEmail } = useAuth();
+  const { user, login, loginWithEmail } = useAuth();
   const [isEmailLogin, setIsEmailLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Automatically close modal when user is logged in
+  useEffect(() => {
+    if (user && isOpen) {
+      onClose();
+    }
+  }, [user, isOpen, onClose]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
       await loginWithEmail(email, password);
-      onClose();
     } finally {
       setIsLoading(false);
     }

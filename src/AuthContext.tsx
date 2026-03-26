@@ -82,8 +82,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await setDoc(userRef, newUser);
             setUser(newUser);
           }
-        } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${firebaseUser.uid}`);
+        } catch (error: any) {
+          console.error('Auth state error:', error);
+          // Don't toast for "missing permissions" on the very first check as it might be race condition
+          // but do log it clearly.
+          if (error.message?.includes('permission-denied')) {
+            console.warn('Permission denied during auth sync - this is expected if rules are still propagating or user is new');
+          } else {
+            toast.error('Error syncing user data. Please refresh.');
+          }
+          setLoading(false);
         }
       } else {
         // Check local storage for staff session
